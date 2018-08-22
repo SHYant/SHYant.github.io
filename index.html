@@ -10,7 +10,7 @@
     <meta name="author" content="Yuan Shen">
     
     
-        <link rel="icon" href="http://yoursite.com/assets/images/favicon.png">
+        <link rel="icon" href="http://yoursite.com/assets/images/yuan.png">
     
     
     <script type="application/ld+json">{"@context":"http://schema.org","@type":"Website","@id":"http://yoursite.com","author":{"@type":"Person","name":"Yuan Shen","sameAs":[],"image":"yuan.jpg"},"name":"Ant Park","description":null,"url":"http://yoursite.com"}</script>
@@ -50,7 +50,7 @@
         
     
 
-<header id="header" data-behavior="5">
+<header id="header" data-behavior="1">
     <i id="btn-open-sidebar" class="fa fa-lg fa-bars"></i>
     <div class="header-title">
         <a class="header-title-link" href="/ ">Ant Park</a>
@@ -74,7 +74,7 @@
         
     
 
-<nav id="sidebar" data-behavior="5">
+<nav id="sidebar" data-behavior="1">
     <div class="sidebar-container">
         
             <div class="sidebar-profile">
@@ -149,14 +149,14 @@
 </nav>
 
             
-            <div id="main" data-behavior="5"
+            <div id="main" data-behavior="1"
                  class="
                         hasCoverMetaIn
                         ">
                 <section class="postShorten-group main-content-wrap">
     
     
-    <article class="postShorten postShorten--thumbnailimg-bottom">
+    <article class="postShorten postShorten--thumbnailimg-right">
         <div class="postShorten-wrap">
             
             <div class="postShorten-header">
@@ -184,86 +184,26 @@
 
             </div>
             
-                <div class="postShorten-content">
+                <div class="postShorten-excerpt">
                     <h2 id="题目：RSA"><a href="#题目：RSA" class="headerlink" title="题目：RSA"></a>题目：RSA</h2><p>输入一个（可能为任意长度）的key，使app返回correct。本题需要提交<code>DDCTF-{key}</code>。出现多解的情况请把符合<code>[0-9a-z]+</code>格式的key提交。</p>
 <p>链接: <a href="https://pan.baidu.com/s/1T7fo0q0tYlsANQCcqpd4HQ" target="_blank" rel="noopener">https://pan.baidu.com/s/1T7fo0q0tYlsANQCcqpd4HQ</a> 密码: j8gs</p>
 <p>初看题目本以为跟RSA解密有关，但整体做下来关联性并不大，只是在最后用到一个知识点而已。</p>
-<h2 id="静态分析"><a href="#静态分析" class="headerlink" title="静态分析"></a>静态分析</h2><p>工具：使用JEB 打开apk，对java层的逻辑进行分析，如下图：</p>
-<p><img src="http://oq6he60vq.bkt.clouddn.com/2018-08-21-jeb_apk_rsa.jpg" alt="jeb"></p>
-<p>在上图Libraries目录下，需要把libhello-libs.so库文件提取出来，拖入IDA进行分析，并且在Exports中找到关键函数，如下图：</p>
-<p><img src="http://oq6he60vq.bkt.clouddn.com/2018-08-21-Window_%E5%92%8C_IDA_-_libhello-libs_so__Users_sy_Documents_CTF_2018DDCTF_libhello-libs_so.jpg" alt=""></p>
-<p>双击进入分析函数，然后按F5，得到代码如下：</p>
-<h2 id=""><a href="#" class="headerlink" title=""></a><img src="http://oq6he60vq.bkt.clouddn.com/2018-08-21-IDA_-_libhello-libs_so__Users_sy_Documents_CTF_2018DDCTF_libhello-libs_so.jpg" alt=""></h2><p>双击进入上图的关键函数，进行静态分析，只能得到输入的字符串长度等于<code>32</code>，后面的循环相对复杂，可能是题目故意弄的复杂，不过大概可以知道是将输入的数据和程序中的数据进行了<code>异或</code>，然后程序进行了什么操作就需要动态调试进行分析，如下图分析：</p>
-<p><img src="http://oq6he60vq.bkt.clouddn.com/2018-08-21-ida_static.jpg" alt=""></p>
-<p><img src="http://oq6he60vq.bkt.clouddn.com/2018-08-21-082503.png" alt=""></p>
-<h2 id="动态分析"><a href="#动态分析" class="headerlink" title="动态分析"></a>动态分析</h2><p>在进行动态调试之前，需要做一些准备工作，由于JEB没有修改apk的功能，所以如果是windows系统，建议用androidkill这个软件打开apk，如果是mac系统，建议用Android Crack Tool打开apk，目的是在<code>AndriodManifest.xml</code>文件中加上debugger条件，然后进行重新编译，签名，之后等到的apk放到手机或模拟器上，然后用IDA打开这个新的apk的<code>libhello-libs.so</code>文件。</p>
-<p><img src="http://oq6he60vq.bkt.clouddn.com/2018-08-21-AndroidManifest_xml.jpg" alt=""></p>
-<p><code>注:由于这个apk是arm架构的，导致我试过很多模拟器都没成功，各种错误，最后用的root权限的真机，系统版本Android5.0以上，所以建议不要用模拟器；</code></p>
-<h4 id="先学习下IDA动态调试so文件的步骤："><a href="#先学习下IDA动态调试so文件的步骤：" class="headerlink" title="先学习下IDA动态调试so文件的步骤："></a>先学习下IDA动态调试so文件的步骤：</h4><ol>
-<li><p>在IDA 6.X/7.0 中找到 android_server，一般在IDA安装目录下的dbgsrv文件夹里 ，push到手机内。</p>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">adb devices #查看是否连接设备</span><br><span class="line">adb push android_server /data/local/tmp/ #把android_server出入手机/data/local/tmp/目录下</span><br></pre></td></tr></table></figure>
-</li>
-<li><p>启动 Android 调试服务器  adb shell</p>
-<p><img src="http://oq6he60vq.bkt.clouddn.com/2018-08-21-1__adb_shell__adb_.jpg" alt=""></p>
-</li>
-<li><p>转发IDA的调试通讯端口</p>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">adb forward tcp:23946 tcp:23946</span><br></pre></td></tr></table></figure>
-</li>
-<li><p>调试模式启动 adb am start -D -n  packagename/classname，等待调试器，成功之后手机显示等待调试提示</p>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">adb shell am start -D -n com.didictf.guesskey2018one/com.didictf.guesskey2018one.MainActivity</span><br></pre></td></tr></table></figure>
-</li>
-<li><p>启动 monitor，一般在Android SDK安装目录下的tool文件夹里，查看是否挂起进程，并处于待调试状态；</p>
-<p><img src="http://oq6he60vq.bkt.clouddn.com/2018-08-21-Android_Device_Monitor.jpg" alt=""></p>
-</li>
-<li><p>启动 jdb，port是调试程序的jdwp号，可以不写8700，monitor中的显示</p>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">jdb -connect com.sun.jdi.SocketAttach:hostname=localhost,port=8700</span><br></pre></td></tr></table></figure>
-</li>
-<li><p>接着设置IDA，之前已经用IDA打开这个新的apk的<code>libhello-libs.so</code>文件，选择<code>Remote ARM Linux/Android debugger</code>，点击菜单项Debugger中的Process option里设置这个，如下图：</p>
-<p><img src="http://oq6he60vq.bkt.clouddn.com/2018-08-21-Debug_application_setup__armlinux_%E5%92%8C_IDA_-_libhello-libs_so__Users_sy_Documents_CTF_2018DDCTF_libhello-libs_so.jpg" alt=""></p>
-</li>
-<li><p>菜单项Debugger中的Debugger option里设置如图:</p>
-<p><img src="http://oq6he60vq.bkt.clouddn.com/2018-08-21-Debugger_options.jpg" alt=""></p>
-</li>
-<li><p>菜单项Debugger中attach to process前，先下断点，断点设置在静态分析中关键函数的开始;</p>
-<p><img src="http://oq6he60vq.bkt.clouddn.com/2018-08-21-ida_break.jpg" alt=""></p>
-</li>
-<li><p>然后进行attach to process</p>
-<p><img src="http://oq6he60vq.bkt.clouddn.com/2018-08-21-Choose_process_to_attach_to.jpg" alt=""></p>
-</li>
-<li><p>最后运行F9，会提示加载的与attach process中的so文件是不是一直，选择same，就可以了，之后程序停在了库的加载点（之前debuggr options中有选），然后再F9运行，发现手机中的app等待我们输入字符串，随便输入32位字符串（我在这里输入的是32个1），点击<code>test</code>发现程序停在了第9步设定的断点，然后就可以一步步跟踪调试了，如图: （利用IDA动态调试so文件的整体的环境配置就到此结束。）</p>
-<p><img src="http://oq6he60vq.bkt.clouddn.com/2018-08-21-IDA1.jpg" alt=""></p>
-</li>
-</ol>
-<h4 id="开始调试程序"><a href="#开始调试程序" class="headerlink" title="开始调试程序"></a>开始调试程序</h4><p>在静态分析中已经预测有判断输入字符串长度的地方，所以我们单步执行F7，停在判断长度的地方：</p>
-<p><img src="http://oq6he60vq.bkt.clouddn.com/2018-08-21-112346.png" alt=""></p>
-<p>因为我们输入的是32个字符，所以在继续执行的时候跳转到绿色线路上，如果输入的不是32位但也不想直接退出，则需要在判断完成之后把符号寄存器<code>z位由0改成1</code>，接下来运行到寻找之前的异或运算，观察R1和R2寄存器中的内容，如图：（此次异或运算是把我们输入的和程序中固定的数据逐位循环进行运算）</p>
-<p><img src="http://oq6he60vq.bkt.clouddn.com/2018-08-21-IDA3.jpg" alt=""></p>
-<p>异或完之后来到一个很复杂的循环里，动态分析发现其效果就是判断arr是否等于arr[i+10]，如果不等于就跳转退出，i从0到22，而arr就是上一步异或完后得到的字符串，断点设置如下图，需要跟踪就不难发现了：</p>
-<p><img src="http://oq6he60vq.bkt.clouddn.com/2018-08-21-%E5%85%A8%E5%B1%8F%E5%B9%952018_8_21_%E4%B8%8B%E5%8D%888_07.jpg" alt=""></p>
-<p>如果不嫌麻烦可以每次手动改寄存器的值完成跳转，也可以直接在循环结束后的代码，右键设置Set IP，让程序跳过循环继续往下分析；</p>
-<p><img src="http://oq6he60vq.bkt.clouddn.com/2018-08-21-IDA4.jpg" alt=""></p>
-<p>接下来是两个字符串加上两个复制的循环，直接跟有些复杂，其中有个函数<code>j_j__ZNSt3mapIciSt4lessIcESaISt4pairIKciEEEixERS3_</code>的作用是转为数字字符串，在整个循环结束后发现函数<code>j_atoll(v27)</code>，直接在这里下断点拦截数据，获得核心数据，如图：</p>
-<p><img src="http://oq6he60vq.bkt.clouddn.com/2018-08-21-IDA5-1.jpg" alt=""></p>
-<p>之后就是判断条件了，如下图，经过分析只有当10个字符转化的数字是上述核心数据的因数，且是较小的那个是，才能正确返回，否则错误；</p>
-<p><img src="http://oq6he60vq.bkt.clouddn.com/2018-08-21-IDA6.jpg" alt=""></p>
-<p>最后就是唯一跟RSA有关的就是分解大数了，可以在<code>http://factordb.com</code>上进行分解得：<br>$$<br>1499419583 * 3927794789 = 5889412424631952987<br>$$<br>解密脚本如下：</p>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line">unk_4DEF3=[<span class="number">0x52</span>,<span class="number">0x5E</span>,<span class="number">0x54</span>,<span class="number">0x4C</span>,<span class="number">0x52</span>,<span class="number">0x57</span>,<span class="number">0x50</span>,<span class="number">0x58</span>,<span class="number">0x0C</span>,<span class="number">0x4A</span>,<span class="number">0x43</span>,<span class="number">0x50</span>,<span class="number">0x0A</span>,<span class="number">0x5C</span>,<span class="number">0x44</span>,<span class="number">0x03</span>,<span class="number">0x53</span>,<span class="number">0x40</span>,<span class="number">0x5F</span>,<span class="number">0x06</span>,<span class="number">0x40</span>,<span class="number">0x06</span>,<span class="number">0x52</span>,<span class="number">0x08</span>,<span class="number">0x58</span>,<span class="number">0x53</span>,<span class="number">0x5D</span>,<span class="number">0x06</span>,<span class="number">0x01</span>,<span class="number">0x55</span>,<span class="number">0x5C</span>,<span class="number">0x57</span>]</span><br><span class="line"></span><br><span class="line"><span class="comment">#key=1499419583</span></span><br><span class="line">key=[<span class="number">0x31</span>,<span class="number">0x34</span>,<span class="number">0x39</span>,<span class="number">0x39</span>,<span class="number">0x34</span>,<span class="number">0x31</span>,<span class="number">0x39</span>,<span class="number">0x35</span>,<span class="number">0x38</span>,<span class="number">0x33</span>]</span><br><span class="line">j=<span class="number">0</span></span><br><span class="line">str=<span class="string">''</span></span><br><span class="line"><span class="keyword">for</span> i <span class="keyword">in</span> range(len(unk_4DEF3)):</span><br><span class="line">    unk_4DEF3[i]^=key[j]</span><br><span class="line">    j=(j+<span class="number">1</span>)%<span class="number">10</span></span><br><span class="line">    str+=chr(unk_4DEF3[i])</span><br><span class="line">    <span class="keyword">print</span> unk_4DEF3[i]</span><br><span class="line"> </span><br><span class="line"><span class="keyword">print</span> str</span><br></pre></td></tr></table></figure>
-<p>总结：离大佬们的差距还是很大的，慢慢积累吧，一开始调试的时候遇到了很多问题，但最终还是坚持下来了，收获良多，感谢自己。</p>
-
                     
+                        <a href="/2018/08/21/RSA/" class="postShorten-excerpt_link link">
+                            阅读全文
+                        </a>
                         
-
-                    
-                    
-                        <p>
-                            <a href="/2018/08/21/RSA/#post-footer" class="postShorten-excerpt_link link">
-                                评论和共享
-                            </a>
-                        </p>
                     
                 </div>
             
         </div>
+        
+            <a href="/2018/08/21/RSA/">
+                <div class="postShorten-thumbnailimg">
+                    <img alt="" src="http://yoursite.com/2018/08/21/RSA/image-1.png"/>
+                </div>
+            </a>
+            
         
     </article>
     
