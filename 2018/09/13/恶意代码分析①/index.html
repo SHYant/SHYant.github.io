@@ -1,0 +1,349 @@
+
+<!DOCTYPE html>
+<html lang="zh-cn">
+    
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="generator" content="Ant Park">
+    <title>恶意代码分析① - Ant Park</title>
+    <meta name="author" content="Yuan Shen">
+    
+    
+        <link rel="icon" href="http://yoursite.com/assets/images/yuan.png">
+    
+    
+    <script type="application/ld+json">{"@context":"http://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Yuan Shen","sameAs":[],"image":"yuan.jpg"},"articleBody":"恶意代码名称：997cf4517ee348ea771fd05f489c07fe（MD5）\n恶意代码来源：virustotal\n恶意代码类型：木马–远控\n简单描述：该样本运行时通过创建傀儡进程从资源数据加载名为Nanocore的远控程序在内存中执行，Nanocore可以远程完全控制受害主机，功能包括:监控屏幕、键盘记录、远程文件管理等。\n\n行为监控在虚拟机上运行样本（做完快照之后），利用火绒剑对样本行为进行监测，本虚拟机用的是win7_x86，如下图：\n\n\n文件行为：\n​    1、在C:\\Program Files\\Common Files\\System\\目录下释放symsrv.dll\n​    2、把自身拷贝到C:\\Program Files\\SMTP Monitor\\目录下并改名为smtpmon.exe\n注册表操作：把C:\\Program Files\\SMTP Monitor\\smtpmon.exe路径写入HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run\\SMTP Monitor达到开机自启。\n网络行为：连接域名（191.101.22.13:4110），接受C&amp;C服务器指令。\n释放衍生文件：symsrv.dll、smtpmon.exe\n进程：创建傀儡进程smtpmon.exe\n逆向分析一、手动脱壳首先查壳，发现样本采用UPX壳，主流三种查壳工具（PEiD、EXEInfoPE、DetectItEasy）\n\n然后用OllyDbg打开样本，因为样本加壳所以在打开时会询问是否继续分析，选否：\n\n进行手动脱壳，根据UPX壳的特点，在程序开始时运行pushad开始后，则在程序解压到内存中结束时必然对应popad，以及随后的长跳转指令。所以可以采用ESP定律法或者查找指令序列，在长跳转处下断点，运行程序，当程序断下时再单步运行一步，此时达到程序脱壳后在内存中的位置，如图：\n\n然后利用ollydbgdump插件进行dump保存为.exe文件（不选择重建IAT选项），但是该文件还不能在od中打开，报错（还没有修复IAT表），所以使用Import REC这个软件进行修复（修改OEP，自动查找IAT，获取输入表，最后转储到刚刚dump出的文件）。\n\n最后成功脱壳，能够正常运行，识别出编译器，但好像区段还有些问题，不过没关系以后能运行，可以继续分析，并把脱完壳的程序重命名为2_.exe\n\n二、Dump傀儡进程通过行为监测，发现样本在运行中创建了傀儡进程后就结束了自己的进程，所以需要在程序创建傀儡进程后（在唤醒进程运行之前），从内存中dump从傀儡进程在单独分析。\n首先了解下傀儡进程创建过程：\n​    (1) 通过CreateProcess以CREATE_SUSPENDED方式创建一个进程。\n​    (2) GetThreadContext获取挂起进程CONTEXT。\n​    (3) ZwUnmapViewOfSection卸载挂起进程内存空间数据；\n​    (4) VirtualAlloc分配内存空间；\n​    (5) WriteProcessMemory将恶意代码写入分配的内存；\n​    (6) SetThreadContext设置挂起进程状态；\n​    (7) ResumeThread唤醒进程运行\n1、ZwResumeThread设置断点父进程对傀儡进程写入数据并设置线程上下文后会调用ZwResumeThread唤醒线程运行。\n\n2、Dump傀儡进程当ZwResumeThread断下后，使用PChunter工具， dump傀儡进程，方法：右键–查看–查看进程内存，点击dump保存为exe文件。\n\n3、修正区段信息LoadPE载入dump后的程序，查看区段信息，修正前\n\n修正后，就可以完美的运行啦！\n\n4、脱壳查壳发现dump出来的文件，用之前提到的查壳工具发现还是UPX壳，这次我们用工具直接拖\n\n之前用这种方法不成功，该样本运行时首先会通过释放symsrv.dll并动态加载调用Floodfix2函数来解密数据，所以手动脱壳比较准确。\n\n三、分析傀儡进程傀儡进程的主要功能为从资源数据中加载一个PE文件到内存中并执行，用IDA打开定位加载资源函数：\n\n根据静态分析，用OD调试，设置两个断点，分别在VirtualAlloc和LoadResource，然后F9运行\n\n当停在第一个断点时，观察寄存器EAX中的值，是为加载资源文件申请的内存空间大小\n\n当停在第二个断点时，再运行一步获得LoadResource函数的返回值存入EAX，该值为资源在内存中的首地址，然后首地址+资源的大小=资源文件结束地址，整体通过二进制复制提取出来。\n\n用010editor，粘贴复制的数据，保存为.exe文件，并查壳PEiD发现是C#所编写的名为Nanocore的远控程序\n\n四、资源文件查壳分析该dump的PE文件：\n\n需要用dnSpy软件对C#程序进行反编译，期初发现该C#程序有加混淆，所以需要用de4dot.exe对C#进行反混淆，然后再用dnSpy打开\n\n经过分析远控程序尝试连接191.101.22.13:4110，但服务器已无法连接，网上查找到对应版本的控制端，修改连接地址，成功上线。\n\n\n总结：离大佬们的差距还是很大的，慢慢积累吧，一开始分析的时候遇到了很多问题，但最终还是坚持下来了，收获良多，感谢自己。\n","dateCreated":"2018-09-13T19:05:50+08:00","dateModified":"2018-09-14T19:15:07+08:00","datePublished":"2018-09-13T19:05:50+08:00","description":"恶意代码名称：997cf4517ee348ea771fd05f489c07fe（MD5）\n恶意代码来源：virustotal\n恶意代码类型：木马–远控\n简单描述：该样本运行时通过创建傀儡进程从资源数据加载名为Nanocore的远控程序在内存中执行，Nanocore可以远程完全控制受害主机，功能包括:监控屏幕、键盘记录、远程文件管理等。","headline":"恶意代码分析①","image":[null,"alone.png"],"mainEntityOfPage":{"@type":"WebPage","@id":"http://yoursite.com/2018/09/13/恶意代码分析①/"},"publisher":{"@type":"Organization","name":"Yuan Shen","sameAs":[],"image":"yuan.jpg","logo":{"@type":"ImageObject","url":"yuan.jpg"}},"url":"http://yoursite.com/2018/09/13/恶意代码分析①/","keywords":"恶意代码分析, 远控木马","thumbnailUrl":"alone.png"}</script>
+    <meta name="description" content="恶意代码名称：997cf4517ee348ea771fd05f489c07fe（MD5） 恶意代码来源：virustotal 恶意代码类型：木马–远控 简单描述：该样本运行时通过创建傀儡进程从资源数据加载名为Nanocore的远控程序在内存中执行，Nanocore可以远程完全控制受害主机，功能包括:监控屏幕、键盘记录、远程文件管理等。">
+<meta name="keywords" content="恶意代码分析,远控木马">
+<meta property="og:type" content="blog">
+<meta property="og:title" content="恶意代码分析①">
+<meta property="og:url" content="http://yoursite.com/2018/09/13/恶意代码分析①/index.html">
+<meta property="og:site_name" content="Ant Park">
+<meta property="og:description" content="恶意代码名称：997cf4517ee348ea771fd05f489c07fe（MD5） 恶意代码来源：virustotal 恶意代码类型：木马–远控 简单描述：该样本运行时通过创建傀儡进程从资源数据加载名为Nanocore的远控程序在内存中执行，Nanocore可以远程完全控制受害主机，功能包括:监控屏幕、键盘记录、远程文件管理等。">
+<meta property="og:locale" content="zh-cn">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/006tNbRwly1fv882do8nrj31kw0wt7wj.jpg">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/006tNbRwly1fv88a9hjsjj31j406kq61.jpg">
+<meta property="og:image" content="https://ws3.sinaimg.cn/large/006tNbRwgy1fv89v7l13nj30hk0a6wgp.jpg">
+<meta property="og:image" content="https://ws3.sinaimg.cn/large/006tNbRwly1fv89yvcuqij313y0san5d.jpg">
+<meta property="og:image" content="https://ws2.sinaimg.cn/large/006tNbRwly1fv8b2jb1h5j31kw0t4h21.jpg">
+<meta property="og:image" content="https://ws2.sinaimg.cn/large/006tNbRwly1fv8bd52tddj31kw0xl1d8.jpg">
+<meta property="og:image" content="https://ws2.sinaimg.cn/large/006tNbRwly1fv8bs5tdfzj30hu0amq57.jpg">
+<meta property="og:image" content="https://ws3.sinaimg.cn/large/006tNbRwly1fv93b95ev5j3170088jv1.jpg">
+<meta property="og:image" content="https://ws2.sinaimg.cn/large/006tNbRwly1fv93k614l0j31180o8alp.jpg">
+<meta property="og:image" content="https://ws4.sinaimg.cn/large/006tNbRwly1fv93skkr6cj30t00ogdmg.jpg">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/006tNbRwly1fv93tyv8gwj30ki06wmy3.jpg">
+<meta property="og:image" content="https://ws3.sinaimg.cn/large/006tNbRwly1fv94cf9gmzj30qg0soaf5.jpg">
+<meta property="og:image" content="https://ws4.sinaimg.cn/large/006tNbRwly1fv94id39kvj30p40c2gob.jpg">
+<meta property="og:image" content="https://ws4.sinaimg.cn/large/006tNbRwly1fv95jzh2z6j30t80t4n28.jpg">
+<meta property="og:image" content="https://ws2.sinaimg.cn/large/006tNbRwly1fv95vkndjtj30so05gdhk.jpg">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/006tNbRwly1fv9689fxruj31fu0skk6o.jpg">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/006tNbRwly1fv96kfcj0pj31h80zsqna.jpg">
+<meta property="og:image" content="https://ws2.sinaimg.cn/large/006tNbRwgy1fv96o1zpybj30wy0n848h.jpg">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/006tNbRwgy1fv96qy7z24j30hy0a876d.jpg">
+<meta property="og:image" content="https://ws4.sinaimg.cn/large/0069RVTdly1fv99sz7wyij31ho0s47ep.jpg">
+<meta property="og:image" content="https://ws4.sinaimg.cn/large/0069RVTdly1fv99u3z2rzj30iq0c8ta9.jpg">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/0069RVTdly1fv99ukbi85j30iq0data5.jpg">
+<meta property="og:updated_time" content="2018-09-14T11:15:07.000Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="恶意代码分析①">
+<meta name="twitter:description" content="恶意代码名称：997cf4517ee348ea771fd05f489c07fe（MD5） 恶意代码来源：virustotal 恶意代码类型：木马–远控 简单描述：该样本运行时通过创建傀儡进程从资源数据加载名为Nanocore的远控程序在内存中执行，Nanocore可以远程完全控制受害主机，功能包括:监控屏幕、键盘记录、远程文件管理等。">
+<meta name="twitter:image" content="https://ws1.sinaimg.cn/large/006tNbRwly1fv882do8nrj31kw0wt7wj.jpg">
+    
+    
+        
+    
+    
+        <meta property="og:image" content="http://yoursite.com/assets/images/yuan.jpg"/>
+    
+    
+    
+        <meta property="og:image" content="http://yoursite.com/2018/09/13/恶意代码分析①/alone.png"/>
+        <meta class="swiftype" name="image" data-type="enum" content="http://yoursite.com/2018/09/13/恶意代码分析①/alone.png" />
+    
+    
+    <!--STYLES-->
+    <link rel="stylesheet" href="/assets/css/style-du2xmrqdqrl2ollgeiw050kpl6l4nbyz7bumjuurjgsxyopifvukebxc9lqe.min.css">
+    <!--STYLES END-->
+    
+
+    
+</head>
+
+    <body>
+        <div id="blog">
+            <!-- Define author's picture -->
+
+
+    
+        
+            
+        
+    
+
+<header id="header" data-behavior="4">
+    <i id="btn-open-sidebar" class="fa fa-lg fa-bars"></i>
+    <div class="header-title">
+        <a class="header-title-link" href="/ ">Ant Park</a>
+    </div>
+    
+        
+            <a  class="header-right-picture "
+                href="#about">
+        
+        
+            <img class="header-picture" src="/assets/images/yuan.jpg" alt="作者的图片"/>
+        
+        </a>
+    
+</header>
+
+            <!-- Define author's picture -->
+
+
+
+        
+    
+
+<nav id="sidebar" data-behavior="4">
+    <div class="sidebar-container">
+        
+            <div class="sidebar-profile">
+                <a href="/#about">
+                    <img class="sidebar-profile-picture" src="/assets/images/yuan.jpg" alt="作者的图片"/>
+                </a>
+                <h4 class="sidebar-profile-name">Yuan Shen</h4>
+                
+                    <h5 class="sidebar-profile-bio"><p>author.bio</p>
+</h5>
+                
+            </div>
+        
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/ "
+                            
+                            title="首页"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-home" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">首页</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-categories"
+                            
+                            title="分类"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-bookmark" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">分类</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-tags"
+                            
+                            title="标签"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-tags" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">标签</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-archives"
+                            
+                            title="归档"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-archive" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">归档</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+    </div>
+</nav>
+
+            
+        <div class="post-header-cover
+                    text-center
+                    post-header-cover--full"
+             style="background-image:url('/2018/09/13/恶意代码分析①/alone.png');"
+             data-behavior="4">
+            
+        </div>
+
+            <div id="main" data-behavior="4"
+                 class="hasCover
+                        hasCoverMetaOut
+                        hasCoverCaption">
+                
+<article class="post">
+    
+        <span class="post-header-cover-caption caption">Lonely</span>
+    
+    
+        <div class="post-header main-content-wrap text-center">
+    
+        <h1 class="post-title">
+            恶意代码分析①
+        </h1>
+    
+    
+</div>
+
+    
+    <div class="post-content markdown">
+        <div class="main-content-wrap">
+            <p>恶意代码名称：997cf4517ee348ea771fd05f489c07fe（MD5）</p>
+<p>恶意代码来源：virustotal</p>
+<p>恶意代码类型：木马–远控</p>
+<p>简单描述：该样本运行时通过创建傀儡进程从资源数据加载名为Nanocore的远控程序在内存中执行，Nanocore可以远程完全控制受害主机，功能包括:监控屏幕、键盘记录、远程文件管理等。</p>
+<a id="more"></a>
+<h2 id="行为监控"><a href="#行为监控" class="headerlink" title="行为监控"></a>行为监控</h2><p>在虚拟机上运行样本（做完快照之后），利用火绒剑对样本行为进行监测，本虚拟机用的是win7_x86，如下图：</p>
+<p><img src="https://ws1.sinaimg.cn/large/006tNbRwly1fv882do8nrj31kw0wt7wj.jpg" alt=""></p>
+<p><img src="https://ws1.sinaimg.cn/large/006tNbRwly1fv88a9hjsjj31j406kq61.jpg" alt=""></p>
+<p><strong><em>文件行为：</em></strong></p>
+<p>​    1、在C:\Program Files\Common Files\System\目录下释放symsrv.dll</p>
+<p>​    2、把自身拷贝到C:\Program Files\SMTP Monitor\目录下并改名为smtpmon.exe</p>
+<p><strong><em>注册表操作：</em></strong>把C:\Program Files\SMTP Monitor\smtpmon.exe路径写入HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Run\SMTP Monitor达到开机自启。</p>
+<p><strong><em>网络行为：</em></strong>连接域名（191.101.22.13:4110），接受C&amp;C服务器指令。</p>
+<p><strong><em>释放衍生文件：</em></strong>symsrv.dll、smtpmon.exe</p>
+<p><strong><em>进程：</em></strong>创建傀儡进程smtpmon.exe</p>
+<h2 id="逆向分析"><a href="#逆向分析" class="headerlink" title="逆向分析"></a>逆向分析</h2><h3 id="一、手动脱壳"><a href="#一、手动脱壳" class="headerlink" title="一、手动脱壳"></a>一、手动脱壳</h3><p>首先查壳，发现样本采用<code>UPX壳</code>，主流三种查壳工具（PEiD、EXEInfoPE、DetectItEasy）</p>
+<p><img src="https://ws3.sinaimg.cn/large/006tNbRwgy1fv89v7l13nj30hk0a6wgp.jpg" alt=""></p>
+<p>然后用OllyDbg打开样本，因为样本加壳所以在打开时会询问是否继续分析，选<code>否</code>：</p>
+<p><img src="https://ws3.sinaimg.cn/large/006tNbRwly1fv89yvcuqij313y0san5d.jpg" alt=""></p>
+<p>进行手动脱壳，根据UPX壳的特点，在程序开始时运行pushad开始后，则在程序解压到内存中结束时必然对应popad，以及随后的长跳转指令。所以可以采用<code>ESP定律法</code>或者<code>查找指令序列</code>，在长跳转处下断点，运行程序，当程序断下时再单步运行一步，此时达到程序脱壳后在内存中的位置，如图：</p>
+<p><img src="https://ws2.sinaimg.cn/large/006tNbRwly1fv8b2jb1h5j31kw0t4h21.jpg" alt=""></p>
+<p>然后利用ollydbgdump插件进行dump保存为.exe文件（不选择重建IAT选项），但是该文件还不能在od中打开，报错（还没有修复IAT表），所以使用Import REC这个软件进行修复（修改OEP，自动查找IAT，获取输入表，最后转储到刚刚dump出的文件）。</p>
+<p><img src="https://ws2.sinaimg.cn/large/006tNbRwly1fv8bd52tddj31kw0xl1d8.jpg" alt=""></p>
+<p>最后成功脱壳，能够正常运行，识别出编译器，但好像区段还有些问题，不过没关系以后能运行，可以继续分析，并把脱完壳的程序重命名为2_.exe</p>
+<p><img src="https://ws2.sinaimg.cn/large/006tNbRwly1fv8bs5tdfzj30hu0amq57.jpg" alt=""></p>
+<h3 id="二、Dump傀儡进程"><a href="#二、Dump傀儡进程" class="headerlink" title="二、Dump傀儡进程"></a>二、Dump傀儡进程</h3><p>通过行为监测，发现样本在运行中创建了傀儡进程后就结束了自己的进程，所以需要在程序创建傀儡进程后（在唤醒进程运行之前），从内存中dump从傀儡进程在单独分析。</p>
+<p>首先了解下傀儡进程创建过程：</p>
+<p>​    (1) 通过CreateProcess以CREATE_SUSPENDED方式创建一个进程。</p>
+<p>​    (2) GetThreadContext获取挂起进程CONTEXT。</p>
+<p>​    (3) ZwUnmapViewOfSection卸载挂起进程内存空间数据；</p>
+<p>​    (4) VirtualAlloc分配内存空间；</p>
+<p>​    (5) WriteProcessMemory将恶意代码写入分配的内存；</p>
+<p>​    (6) SetThreadContext设置挂起进程状态；</p>
+<p>​    (7) ResumeThread唤醒进程运行</p>
+<h4 id="1、ZwResumeThread设置断点"><a href="#1、ZwResumeThread设置断点" class="headerlink" title="1、ZwResumeThread设置断点"></a>1、ZwResumeThread设置断点</h4><p>父进程对傀儡进程写入数据并设置线程上下文后会调用ZwResumeThread唤醒线程运行。</p>
+<p><img src="https://ws3.sinaimg.cn/large/006tNbRwly1fv93b95ev5j3170088jv1.jpg" alt=""></p>
+<h4 id="2、Dump傀儡进程"><a href="#2、Dump傀儡进程" class="headerlink" title="2、Dump傀儡进程"></a>2、Dump傀儡进程</h4><p>当ZwResumeThread断下后，使用PChunter工具， dump傀儡进程，方法：右键–查看–查看进程内存，点击dump保存为exe文件。</p>
+<p><img src="https://ws2.sinaimg.cn/large/006tNbRwly1fv93k614l0j31180o8alp.jpg" alt=""></p>
+<h4 id="3、修正区段信息"><a href="#3、修正区段信息" class="headerlink" title="3、修正区段信息"></a>3、修正区段信息</h4><p>LoadPE载入dump后的程序，查看区段信息，修正前</p>
+<p><img src="https://ws4.sinaimg.cn/large/006tNbRwly1fv93skkr6cj30t00ogdmg.jpg" alt=""></p>
+<p>修正后，就可以完美的运行啦！</p>
+<p><img src="https://ws1.sinaimg.cn/large/006tNbRwly1fv93tyv8gwj30ki06wmy3.jpg" alt=""></p>
+<h4 id="4、脱壳"><a href="#4、脱壳" class="headerlink" title="4、脱壳"></a>4、脱壳</h4><p>查壳发现dump出来的文件，用之前提到的查壳工具发现还是UPX壳，这次我们用工具直接拖</p>
+<p><img src="https://ws3.sinaimg.cn/large/006tNbRwly1fv94cf9gmzj30qg0soaf5.jpg" alt=""></p>
+<p>之前用这种方法不成功，该样本运行时首先会通过释放symsrv.dll并动态加载调用Floodfix2函数来解密数据，所以手动脱壳比较准确。</p>
+<p><img src="https://ws4.sinaimg.cn/large/006tNbRwly1fv94id39kvj30p40c2gob.jpg" alt=""></p>
+<h3 id="三、分析傀儡进程"><a href="#三、分析傀儡进程" class="headerlink" title="三、分析傀儡进程"></a>三、分析傀儡进程</h3><p>傀儡进程的主要功能为从资源数据中加载一个PE文件到内存中并执行，用IDA打开定位加载资源函数：</p>
+<p><img src="https://ws4.sinaimg.cn/large/006tNbRwly1fv95jzh2z6j30t80t4n28.jpg" alt=""></p>
+<p>根据静态分析，用OD调试，设置两个断点，分别在VirtualAlloc和LoadResource，然后F9运行</p>
+<p><img src="https://ws2.sinaimg.cn/large/006tNbRwly1fv95vkndjtj30so05gdhk.jpg" alt=""></p>
+<p>当停在第一个断点时，观察寄存器EAX中的值，是为加载资源文件申请的内存空间大小</p>
+<p><img src="https://ws1.sinaimg.cn/large/006tNbRwly1fv9689fxruj31fu0skk6o.jpg" alt=""></p>
+<p>当停在第二个断点时，再运行一步获得LoadResource函数的返回值存入EAX，该值为资源在内存中的首地址，然后首地址+资源的大小=资源文件结束地址，整体通过二进制复制提取出来。</p>
+<p><img src="https://ws1.sinaimg.cn/large/006tNbRwly1fv96kfcj0pj31h80zsqna.jpg" alt=""></p>
+<p>用010editor，粘贴复制的数据，保存为.exe文件，并查壳PEiD发现是C#所编写的名为Nanocore的远控程序</p>
+<p><img src="https://ws2.sinaimg.cn/large/006tNbRwgy1fv96o1zpybj30wy0n848h.jpg" alt=""></p>
+<h3 id="四、资源文件"><a href="#四、资源文件" class="headerlink" title="四、资源文件"></a>四、资源文件</h3><p>查壳分析该dump的PE文件：</p>
+<p><img src="https://ws1.sinaimg.cn/large/006tNbRwgy1fv96qy7z24j30hy0a876d.jpg" alt=""></p>
+<p>需要用<code>dnSpy</code>软件对C#程序进行反编译，期初发现该C#程序有加混淆，所以需要用<code>de4dot.exe</code>对C#进行反混淆，然后再用<code>dnSpy</code>打开</p>
+<p><img src="https://ws4.sinaimg.cn/large/0069RVTdly1fv99sz7wyij31ho0s47ep.jpg" alt=""></p>
+<p>经过分析远控程序尝试连接191.101.22.13:4110，但服务器已无法连接，网上查找到对应版本的控制端，修改连接地址，成功上线。</p>
+<p><img src="https://ws4.sinaimg.cn/large/0069RVTdly1fv99u3z2rzj30iq0c8ta9.jpg" alt=""></p>
+<p><img src="https://ws1.sinaimg.cn/large/0069RVTdly1fv99ukbi85j30iq0data5.jpg" alt=""></p>
+<p>总结：离大佬们的差距还是很大的，慢慢积累吧，一开始分析的时候遇到了很多问题，但最终还是坚持下来了，收获良多，感谢自己。</p>
+
+            
+
+        </div>
+    </div>
+    <div id="post-footer" class="post-footer main-content-wrap">
+        
+            <div class="post-footer-tags">
+                <span class="text-color-light text-small">标签</span><br/>
+                
+    <a class="tag tag--primary tag--small t-link" href="/tags/恶意代码分析/">恶意代码分析</a> <a class="tag tag--primary tag--small t-link" href="/tags/远控木马/">远控木马</a>
+
+            </div>
+        
+        
+        
+    </div>
+</article>
+
+
+
+                <footer id="footer" class="main-content-wrap">
+    <span class="copyrights">
+        Copyrights &copy; 2018 Yuan Shen. All Rights Reserved.
+    </span>
+</footer>
+
+            </div>
+            
+        </div>
+        
+
+
+    
+        
+    
+
+<div id="about">
+    <div id="about-card">
+        <div id="about-btn-close">
+            <i class="fa fa-times"></i>
+        </div>
+        
+            <img id="about-card-picture" src="/assets/images/yuan.jpg" alt="作者的图片"/>
+        
+            <h4 id="about-card-name">Yuan Shen</h4>
+        
+            <div id="about-card-bio"><p>author.bio</p>
+</div>
+        
+        
+            <div id="about-card-job">
+                <i class="fa fa-briefcase"></i>
+                <br/>
+                <p>author.job</p>
+
+            </div>
+        
+        
+    </div>
+</div>
+
+        
+        
+<div id="cover" style="background-image:url('/assets/images/cover.jpg');"></div>
+        <!--SCRIPTS-->
+<script src="/assets/js/script-vufjrm3fmbuttogo1hxuu0w9w0sesk5iyysjuguc2hdhufot9szxg8twijry.min.js"></script>
+<!--SCRIPTS END-->
+
+
+
+    </body>
+</html>
