@@ -1,0 +1,325 @@
+
+<!DOCTYPE html>
+<html lang="zh-cn">
+    
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="generator" content="Ant Park">
+    <title>2018网鼎杯-Chaoyang - Ant Park</title>
+    <meta name="author" content="Yuan Shen">
+    
+    
+        <link rel="icon" href="http://yoursite.com/assets/images/yuan.png">
+    
+    
+    <script type="application/ld+json">{"@context":"http://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Yuan Shen","sameAs":[],"image":"yuan.jpg"},"articleBody":"声明：本篇的作者 Moonshadow（CCSR小组重要成员之一）\n题目：逆向题Chaoyang与传统逆向题目不同，为一个文本文件，链接: https://pan.baidu.com/s/1krpOfyCpLAL7ZN5C-PsogA 提取码: 48fe\n\n\n背景知识逆向题Chaoyang与传统逆向题目不同，为一个文本文件，文件中记录若干操作指令，查询得到，文本文件中的指令集为Python脚本的字节码反汇编指令集，格式如下所示：\n\nPython提供的内置dis包对中间字节码进行反汇编，输出上图所示的执行指令序列。以下通过示例展示Python字节码的编译过程和反编译过程。\nPython编译字节码的操作步骤（编译过程）：命令一： python –m py_compile foo.py\n该命令生成pyc文件，即将python源代码py文件编译为pyc字节码文件，实现源代码的封装，以及执行代码的性能提升。\n命令二： python –O –m py_compile foo.py\n该命令生成优化的字节码文件，即pyo文件，该文件的大小比pyc小，因此可以提升加载执行时的性能（但并不能提升运行性能）。此外，另一个优化参数-OO在-O的基础上删除assert语句等，进一步提升性能。\n通过上述命令生成的字节码文件pyc文件或pyo文件可以通过python内置的dis进行反汇编，并输出指令序列，反汇编py函数如下：123456789101112131415def load_bytecode(filename) :    file = open(filename,\"rb\")    header = file.read(8)    if not header.startswith('\\x03\\xF3\\x0D\\x0A'):        raise SystemExit('[!] Header mismatch. The input file is not a valid pyc file.')    rootCodeObject = marshal.load(file)    print(\"Code Frame: \")    dis.disassemble(rootCodeObject)    try:        if len(rootCodeObject.co_names) &gt; 1 :            for index in range(2, len(rootCodeObject.co_consts)):                print(\"Code Block: \" + rootCodeObject.co_names[index])                dis.disassemble(rootCodeObject.co_consts[index])    except AttributeError:        print(\"Disassemble \"+rootCodeObject.co_names[index]+\"error.\")\n通过上述代码调用dis包输出的反汇编指令序列，可通过手工或自动化方式反编译为Python源码。\n逆向分析通过查阅Python官方文档，Python字节码采用逆波兰表达式存储汇编指令，因此，反汇编的指令助记符和参数也为逆波兰表达式，Chaoyang文件中的字节码汇编指令如下：\n\n笔者采用手工方式（实践中尚未发现有效的将汇编代码文本转为Python源代码的工具）对汇编指令序列进行反编译，获得Python源码，以提高代码可读性。\n常见的汇编指令块对应的Python源代码举例如下（更多的示例请见文末参考资料[2]）：\n函数调用\nFor循环\nIf条件分支\n最终获得Chaoyang文件中包含4个Python函数，分别为：\nfull_sieve(n, output)              ——获得小于等于输入参数n的所有质数列表\nget_fs(n, plist=None)              ——因式分解，获得输入参数n的所有因子列表\nget_p_factors(n, plist=None)     ——所有小于等于输入参数n的质数列表中，可以被输入参数n整除的质因子\nmain_function()                 ——获得用户输入，计算后满足条件即输出flag\n求解算法main_function函数逻辑表明，本题的输入为用逗号（,）分割的2个int型数值。分析后可以看到，本体有多组答案，只要满足条件即可输出flag，满足条件的代码为：\n\n对该条件写出求解算法，如下：\n123456789101112131415161718def solve_ get_fs ():    for i in range(40000, 60000) :  # 为提高解题性能，循环范围为4W – 6W        res = 0        for x in get_fs(i):            res += x        if 165416 &gt; res and abs(res - 165416) &lt; 1000 :            print(\"num1=%d, res1=%d\"%(i, res))            solve_ get_ factors (165416 - res)def solve_ get_ factors (num):    for i in range(2, 10000) :   #为提高解题性能，循环阈值取10000        res = 0        for x in get_p_factors(i):            res += x[0]        if res == num :            print(\"num2=%d, res2=%d\"%(i, res))        if res &gt; 165416 :            break\n运行上述求解算法，共得到11组满足需求的输入值，示例如下：\n第一组\nnum1=50880, res1=164592\nnum2=2463, res2=824\nnum2=7389, res2=824\n第二组\nnum1=52272, res1=164920\nnum2=2455, res2=496\nnum2=2946, res2=496\nnum2=5892, res2=496\nnum2=6818, res2=496\nnum2=8143, res2=496\nnum2=8838, res2=496\n第三组（以后省略）\n任选以上一组结果，输入格式为num1,num2，即可返回flag。\n后记本题主要考察Python字节码和反汇编技术的理解和应用，目前已知的若干Python反编译工具，均支持将pyc或pyo字节码文件反编译为Python源码文件。但调研中发现，目前尚没有将字节码指令序列文本转为Python源码的工具，可研发该工具用于Python字节码分析。\n参考资料[1] Python字节码指令集（官方）\nhttps://docs.python.org/2/library/dis.html\n[2] Python字节码指令集和示例代码\nhttp://unpyc.sourceforge.net/Opcodes.html\n[3] Deobfuscating Python Bytecode\nhttps://www.fireeye.com/blog/threat-research/2016/05/deobfuscating_python.html\n再次感谢Moonshadow@CCSR的友情分享","dateCreated":"2018-10-10T14:33:21+08:00","dateModified":"2018-10-10T15:32:54+08:00","datePublished":"2018-10-10T14:33:21+08:00","description":"声明：本篇的作者 Moonshadow（CCSR小组重要成员之一）\n题目：逆向题Chaoyang与传统逆向题目不同，为一个文本文件，链接: https://pan.baidu.com/s/1krpOfyCpLAL7ZN5C-PsogA 提取码: 48fe","headline":"2018网鼎杯-Chaoyang","image":["https://ws2.sinaimg.cn/large/0069RVTdly1fv9d6x9yhjj30o60iqau7.jpg","image-2.png"],"mainEntityOfPage":{"@type":"WebPage","@id":"http://yoursite.com/2018/10/10/2018网鼎杯-Chaoyang/"},"publisher":{"@type":"Organization","name":"Yuan Shen","sameAs":[],"image":"yuan.jpg","logo":{"@type":"ImageObject","url":"yuan.jpg"}},"url":"http://yoursite.com/2018/10/10/2018网鼎杯-Chaoyang/","keywords":"reverse, writeup, 2018网鼎杯, python","thumbnailUrl":"https://ws2.sinaimg.cn/large/0069RVTdly1fv9d6x9yhjj30o60iqau7.jpg"}</script>
+    <meta name="description" content="声明：本篇的作者 Moonshadow（CCSR小组重要成员之一） 题目：逆向题Chaoyang与传统逆向题目不同，为一个文本文件，链接: https://pan.baidu.com/s/1krpOfyCpLAL7ZN5C-PsogA 提取码: 48fe">
+<meta name="keywords" content="reverse,writeup,2018网鼎杯,python">
+<meta property="og:type" content="blog">
+<meta property="og:title" content="2018网鼎杯-Chaoyang">
+<meta property="og:url" content="http://yoursite.com/2018/10/10/2018网鼎杯-Chaoyang/index.html">
+<meta property="og:site_name" content="Ant Park">
+<meta property="og:description" content="声明：本篇的作者 Moonshadow（CCSR小组重要成员之一） 题目：逆向题Chaoyang与传统逆向题目不同，为一个文本文件，链接: https://pan.baidu.com/s/1krpOfyCpLAL7ZN5C-PsogA 提取码: 48fe">
+<meta property="og:locale" content="zh-cn">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/006tNbRwly1fw34u575myj30f809aaax.jpg">
+<meta property="og:image" content="https://ws2.sinaimg.cn/large/006tNbRwly1fw355y8bq0j30f002eaab.jpg">
+<meta property="og:image" content="https://ws4.sinaimg.cn/large/006tNbRwly1fw356uk4vzj30eu02eaab.jpg">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/006tNbRwly1fw35h9jplrj30ps0fg0yx.jpg">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/006tNbRwly1fw35j3yo5mj30qe05sgne.jpg">
+<meta property="og:image" content="https://ws4.sinaimg.cn/large/006tNbRwly1fw35jtaej1j30ro0co78e.jpg">
+<meta property="og:image" content="https://ws4.sinaimg.cn/large/006tNbRwly1fw35kav17dj30v60akgpf.jpg">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/006tNbRwly1fw35muuy60j30am04kweu.jpg">
+<meta property="og:updated_time" content="2018-10-10T07:32:54.000Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="2018网鼎杯-Chaoyang">
+<meta name="twitter:description" content="声明：本篇的作者 Moonshadow（CCSR小组重要成员之一） 题目：逆向题Chaoyang与传统逆向题目不同，为一个文本文件，链接: https://pan.baidu.com/s/1krpOfyCpLAL7ZN5C-PsogA 提取码: 48fe">
+<meta name="twitter:image" content="https://ws1.sinaimg.cn/large/006tNbRwly1fw34u575myj30f809aaax.jpg">
+    
+    
+        
+    
+    
+        <meta property="og:image" content="http://yoursite.com/assets/images/yuan.jpg"/>
+    
+    
+        <meta property="og:image" content="https://ws2.sinaimg.cn/large/0069RVTdly1fv9d6x9yhjj30o60iqau7.jpg"/>
+        <meta class="swiftype" name="image" data-type="enum" content="https://ws2.sinaimg.cn/large/0069RVTdly1fv9d6x9yhjj30o60iqau7.jpg" />
+    
+    
+        <meta property="og:image" content="http://yoursite.com/2018/10/10/2018网鼎杯-Chaoyang/image-2.png"/>
+        <meta class="swiftype" name="image" data-type="enum" content="http://yoursite.com/2018/10/10/2018网鼎杯-Chaoyang/image-2.png" />
+    
+    
+    <!--STYLES-->
+    <link rel="stylesheet" href="/assets/css/style-du2xmrqdqrl2ollgeiw050kpl6l4nbyz7bumjuurjgsxyopifvukebxc9lqe.min.css">
+    <!--STYLES END-->
+    
+
+    
+</head>
+
+    <body>
+        <div id="blog">
+            <!-- Define author's picture -->
+
+
+    
+        
+            
+        
+    
+
+<header id="header" data-behavior="4">
+    <i id="btn-open-sidebar" class="fa fa-lg fa-bars"></i>
+    <div class="header-title">
+        <a class="header-title-link" href="/ ">Ant Park</a>
+    </div>
+    
+        
+            <a  class="header-right-picture "
+                href="#about">
+        
+        
+            <img class="header-picture" src="/assets/images/yuan.jpg" alt="作者的图片"/>
+        
+        </a>
+    
+</header>
+
+            <!-- Define author's picture -->
+
+
+
+        
+    
+
+<nav id="sidebar" data-behavior="4">
+    <div class="sidebar-container">
+        
+            <div class="sidebar-profile">
+                <a href="/#about">
+                    <img class="sidebar-profile-picture" src="/assets/images/yuan.jpg" alt="作者的图片"/>
+                </a>
+                <h4 class="sidebar-profile-name">Yuan Shen</h4>
+                
+                    <h5 class="sidebar-profile-bio"><p>author.bio</p>
+</h5>
+                
+            </div>
+        
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/ "
+                            
+                            title="首页"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-home" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">首页</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-categories"
+                            
+                            title="分类"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-bookmark" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">分类</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-tags"
+                            
+                            title="标签"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-tags" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">标签</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-archives"
+                            
+                            title="归档"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-archive" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">归档</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+    </div>
+</nav>
+
+            
+        <div class="post-header-cover
+                    text-center
+                    post-header-cover--full"
+             style="background-image:url('/2018/10/10/2018网鼎杯-Chaoyang/image-2.png');"
+             data-behavior="4">
+            
+        </div>
+
+            <div id="main" data-behavior="4"
+                 class="hasCover
+                        hasCoverMetaOut
+                        hasCoverCaption">
+                
+<article class="post">
+    
+        <span class="post-header-cover-caption caption">Starry sky</span>
+    
+    
+        <div class="post-header main-content-wrap text-center">
+    
+        <h1 class="post-title">
+            2018网鼎杯-Chaoyang
+        </h1>
+    
+    
+</div>
+
+    
+    <div class="post-content markdown">
+        <div class="main-content-wrap">
+            <p>声明：本篇的作者 Moonshadow（CCSR小组重要成员之一）</p>
+<p>题目：逆向题Chaoyang与传统逆向题目不同，为一个文本文件，链接: <a href="https://pan.baidu.com/s/1krpOfyCpLAL7ZN5C-PsogA" target="_blank" rel="noopener">https://pan.baidu.com/s/1krpOfyCpLAL7ZN5C-PsogA</a> 提取码: 48fe</p>
+<a id="more"></a>
+<h1 id="table-of-contents">目录</h1><ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#背景知识"><span class="toc-text">背景知识</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#Python编译字节码的操作步骤（编译过程）："><span class="toc-text">Python编译字节码的操作步骤（编译过程）：</span></a><ol class="toc-child"><li class="toc-item toc-level-4"><a class="toc-link" href="#命令一：-python-–m-py-compile-foo-py"><span class="toc-text">命令一： python –m py_compile foo.py</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#命令二：-python-–O-–m-py-compile-foo-py"><span class="toc-text">命令二： python –O –m py_compile foo.py</span></a></li></ol></li><li class="toc-item toc-level-3"><a class="toc-link" href="#通过上述命令生成的字节码文件pyc文件或pyo文件可以通过python内置的dis进行反汇编，并输出指令序列，反汇编py函数如下："><span class="toc-text">通过上述命令生成的字节码文件pyc文件或pyo文件可以通过python内置的dis进行反汇编，并输出指令序列，反汇编py函数如下：</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#逆向分析"><span class="toc-text">逆向分析</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#函数调用"><span class="toc-text">函数调用</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#For循环"><span class="toc-text">For循环</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#If条件分支"><span class="toc-text">If条件分支</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#求解算法"><span class="toc-text">求解算法</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#后记"><span class="toc-text">后记</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#参考资料"><span class="toc-text">参考资料</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#再次感谢Moonshadow-CCSR的友情分享"><span class="toc-text">再次感谢Moonshadow@CCSR的友情分享</span></a></li></ol>
+<h2 id="背景知识"><a href="#背景知识" class="headerlink" title="背景知识"></a>背景知识</h2><p>逆向题Chaoyang与传统逆向题目不同，为一个文本文件，文件中记录若干操作指令，查询得到，文本文件中的指令集为Python脚本的字节码反汇编指令集，格式如下所示：</p>
+<p><img src="https://ws1.sinaimg.cn/large/006tNbRwly1fw34u575myj30f809aaax.jpg" alt=""></p>
+<p>Python提供的内置dis包对中间字节码进行反汇编，输出上图所示的执行指令序列。以下通过示例展示Python字节码的编译过程和反编译过程。</p>
+<h3 id="Python编译字节码的操作步骤（编译过程）："><a href="#Python编译字节码的操作步骤（编译过程）：" class="headerlink" title="Python编译字节码的操作步骤（编译过程）："></a>Python编译字节码的操作步骤（编译过程）：</h3><h4 id="命令一：-python-–m-py-compile-foo-py"><a href="#命令一：-python-–m-py-compile-foo-py" class="headerlink" title="命令一： python –m py_compile foo.py"></a><strong>命令一： python –m py_compile foo.py</strong></h4><p><img src="https://ws2.sinaimg.cn/large/006tNbRwly1fw355y8bq0j30f002eaab.jpg" alt=""></p>
+<p>该命令生成pyc文件，即将python源代码py文件编译为pyc字节码文件，实现源代码的封装，以及执行代码的性能提升。</p>
+<h4 id="命令二：-python-–O-–m-py-compile-foo-py"><a href="#命令二：-python-–O-–m-py-compile-foo-py" class="headerlink" title="命令二： python –O –m py_compile foo.py"></a><strong>命令二： python –O –m py_compile foo.py</strong></h4><p><img src="https://ws4.sinaimg.cn/large/006tNbRwly1fw356uk4vzj30eu02eaab.jpg" alt=""></p>
+<p>该命令生成优化的字节码文件，即pyo文件，该文件的大小比pyc小，因此可以提升加载执行时的性能（但并不能提升运行性能）。此外，另一个优化参数-OO在-O的基础上删除assert语句等，进一步提升性能。</p>
+<h3 id="通过上述命令生成的字节码文件pyc文件或pyo文件可以通过python内置的dis进行反汇编，并输出指令序列，反汇编py函数如下："><a href="#通过上述命令生成的字节码文件pyc文件或pyo文件可以通过python内置的dis进行反汇编，并输出指令序列，反汇编py函数如下：" class="headerlink" title="通过上述命令生成的字节码文件pyc文件或pyo文件可以通过python内置的dis进行反汇编，并输出指令序列，反汇编py函数如下："></a>通过上述命令生成的字节码文件pyc文件或pyo文件可以通过python内置的dis进行反汇编，并输出指令序列，反汇编py函数如下：</h3><figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">load_bytecode</span><span class="params">(filename)</span> :</span></span><br><span class="line">    file = open(filename,<span class="string">"rb"</span>)</span><br><span class="line">    header = file.read(<span class="number">8</span>)</span><br><span class="line">    <span class="keyword">if</span> <span class="keyword">not</span> header.startswith(<span class="string">'\x03\xF3\x0D\x0A'</span>):</span><br><span class="line">        <span class="keyword">raise</span> SystemExit(<span class="string">'[!] Header mismatch. The input file is not a valid pyc file.'</span>)</span><br><span class="line">    rootCodeObject = marshal.load(file)</span><br><span class="line">    print(<span class="string">"Code Frame: "</span>)</span><br><span class="line">    dis.disassemble(rootCodeObject)</span><br><span class="line">    <span class="keyword">try</span>:</span><br><span class="line">        <span class="keyword">if</span> len(rootCodeObject.co_names) &gt; <span class="number">1</span> :</span><br><span class="line">            <span class="keyword">for</span> index <span class="keyword">in</span> range(<span class="number">2</span>, len(rootCodeObject.co_consts)):</span><br><span class="line">                print(<span class="string">"Code Block: "</span> + rootCodeObject.co_names[index])</span><br><span class="line">                dis.disassemble(rootCodeObject.co_consts[index])</span><br><span class="line">    <span class="keyword">except</span> AttributeError:</span><br><span class="line">        print(<span class="string">"Disassemble "</span>+rootCodeObject.co_names[index]+<span class="string">"error."</span>)</span><br></pre></td></tr></table></figure>
+<p>通过上述代码调用dis包输出的反汇编指令序列，可通过手工或自动化方式反编译为Python源码。</p>
+<h2 id="逆向分析"><a href="#逆向分析" class="headerlink" title="逆向分析"></a>逆向分析</h2><p>通过查阅Python官方文档，Python字节码采用逆波兰表达式存储汇编指令，因此，反汇编的指令助记符和参数也为逆波兰表达式，Chaoyang文件中的字节码汇编指令如下：</p>
+<p><img src="https://ws1.sinaimg.cn/large/006tNbRwly1fw35h9jplrj30ps0fg0yx.jpg" alt=""></p>
+<p>笔者采用手工方式（实践中尚未发现有效的将汇编代码文本转为Python源代码的工具）对汇编指令序列进行反编译，获得Python源码，以提高代码可读性。</p>
+<p>常见的汇编指令块对应的Python源代码举例如下（更多的示例请见文末参考资料[2]）：</p>
+<h3 id="函数调用"><a href="#函数调用" class="headerlink" title="函数调用"></a>函数调用</h3><p><img src="https://ws1.sinaimg.cn/large/006tNbRwly1fw35j3yo5mj30qe05sgne.jpg" alt=""></p>
+<h3 id="For循环"><a href="#For循环" class="headerlink" title="For循环"></a>For循环</h3><p><img src="https://ws4.sinaimg.cn/large/006tNbRwly1fw35jtaej1j30ro0co78e.jpg" alt=""></p>
+<h3 id="If条件分支"><a href="#If条件分支" class="headerlink" title="If条件分支"></a>If条件分支</h3><p><img src="https://ws4.sinaimg.cn/large/006tNbRwly1fw35kav17dj30v60akgpf.jpg" alt=""></p>
+<p>最终获得Chaoyang文件中包含4个Python函数，分别为：</p>
+<p>full_sieve(n, output)              ——获得小于等于输入参数n的所有质数列表</p>
+<p>get_fs(n, plist=None)              ——因式分解，获得输入参数n的所有因子列表</p>
+<p>get_p_factors(n, plist=None)     ——所有小于等于输入参数n的质数列表中，可以被输入参数n整除的质因子</p>
+<p>main_function()                 ——获得用户输入，计算后满足条件即输出flag</p>
+<h2 id="求解算法"><a href="#求解算法" class="headerlink" title="求解算法"></a>求解算法</h2><p>main_function函数逻辑表明，本题的输入为用逗号（,）分割的2个int型数值。分析后可以看到，本体有多组答案，只要满足条件即可输出flag，满足条件的代码为：</p>
+<p><img src="https://ws1.sinaimg.cn/large/006tNbRwly1fw35muuy60j30am04kweu.jpg" alt=""></p>
+<p>对该条件写出求解算法，如下：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">solve_</span> <span class="title">get_fs</span> <span class="params">()</span>:</span></span><br><span class="line">    <span class="keyword">for</span> i <span class="keyword">in</span> range(<span class="number">40000</span>, <span class="number">60000</span>) :  <span class="comment"># 为提高解题性能，循环范围为4W – 6W</span></span><br><span class="line">        res = <span class="number">0</span></span><br><span class="line">        <span class="keyword">for</span> x <span class="keyword">in</span> get_fs(i):</span><br><span class="line">            res += x</span><br><span class="line">        <span class="keyword">if</span> <span class="number">165416</span> &gt; res <span class="keyword">and</span> abs(res - <span class="number">165416</span>) &lt; <span class="number">1000</span> :</span><br><span class="line">            print(<span class="string">"num1=%d, res1=%d"</span>%(i, res))</span><br><span class="line">            solve_ get_ factors (<span class="number">165416</span> - res)</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">solve_</span> <span class="title">get_</span> <span class="title">factors</span> <span class="params">(num)</span>:</span></span><br><span class="line">    <span class="keyword">for</span> i <span class="keyword">in</span> range(<span class="number">2</span>, <span class="number">10000</span>) :   <span class="comment">#为提高解题性能，循环阈值取10000</span></span><br><span class="line">        res = <span class="number">0</span></span><br><span class="line">        <span class="keyword">for</span> x <span class="keyword">in</span> get_p_factors(i):</span><br><span class="line">            res += x[<span class="number">0</span>]</span><br><span class="line">        <span class="keyword">if</span> res == num :</span><br><span class="line">            print(<span class="string">"num2=%d, res2=%d"</span>%(i, res))</span><br><span class="line">        <span class="keyword">if</span> res &gt; <span class="number">165416</span> :</span><br><span class="line">            <span class="keyword">break</span></span><br></pre></td></tr></table></figure>
+<p>运行上述求解算法，共得到11组满足需求的输入值，示例如下：</p>
+<p>第一组</p>
+<p>num1=50880, res1=164592</p>
+<p>num2=2463, res2=824</p>
+<p>num2=7389, res2=824</p>
+<p>第二组</p>
+<p>num1=52272, res1=164920</p>
+<p>num2=2455, res2=496</p>
+<p>num2=2946, res2=496</p>
+<p>num2=5892, res2=496</p>
+<p>num2=6818, res2=496</p>
+<p>num2=8143, res2=496</p>
+<p>num2=8838, res2=496</p>
+<p>第三组（以后省略）</p>
+<p>任选以上一组结果，输入格式为num1,num2，即可返回flag。</p>
+<h2 id="后记"><a href="#后记" class="headerlink" title="后记"></a>后记</h2><p>本题主要考察Python字节码和反汇编技术的理解和应用，目前已知的若干Python反编译工具，均支持将pyc或pyo字节码文件反编译为Python源码文件。但调研中发现，目前尚没有将字节码指令序列文本转为Python源码的工具，可研发该工具用于Python字节码分析。</p>
+<h2 id="参考资料"><a href="#参考资料" class="headerlink" title="参考资料"></a>参考资料</h2><p><strong>[1]</strong> Python字节码指令集（官方）</p>
+<p><a href="https://docs.python.org/2/library/dis.html" target="_blank" rel="noopener">https://docs.python.org/2/library/dis.html</a></p>
+<p><strong>[2]</strong> Python字节码指令集和示例代码</p>
+<p><a href="http://unpyc.sourceforge.net/Opcodes.html" target="_blank" rel="noopener">http://unpyc.sourceforge.net/Opcodes.html</a></p>
+<p><strong>[3]</strong> Deobfuscating Python Bytecode</p>
+<p><a href="https://www.fireeye.com/blog/threat-research/2016/05/deobfuscating_python.html" target="_blank" rel="noopener">https://www.fireeye.com/blog/threat-research/2016/05/deobfuscating_python.html</a></p>
+<h2 id="再次感谢Moonshadow-CCSR的友情分享"><a href="#再次感谢Moonshadow-CCSR的友情分享" class="headerlink" title="再次感谢Moonshadow@CCSR的友情分享"></a>再次感谢Moonshadow@CCSR的友情分享</h2>
+            
+
+        </div>
+    </div>
+    <div id="post-footer" class="post-footer main-content-wrap">
+        
+            <div class="post-footer-tags">
+                <span class="text-color-light text-small">标签</span><br/>
+                
+    <a class="tag tag--primary tag--small t-link" href="/tags/2018网鼎杯/">2018网鼎杯</a> <a class="tag tag--primary tag--small t-link" href="/tags/python/">python</a> <a class="tag tag--primary tag--small t-link" href="/tags/reverse/">reverse</a> <a class="tag tag--primary tag--small t-link" href="/tags/writeup/">writeup</a>
+
+            </div>
+        
+        
+        
+    </div>
+</article>
+
+
+
+                <footer id="footer" class="main-content-wrap">
+    <span class="copyrights">
+        Copyrights &copy; 2018 Yuan Shen. All Rights Reserved.
+    </span>
+</footer>
+
+            </div>
+            
+        </div>
+        
+
+
+    
+        
+    
+
+<div id="about">
+    <div id="about-card">
+        <div id="about-btn-close">
+            <i class="fa fa-times"></i>
+        </div>
+        
+            <img id="about-card-picture" src="/assets/images/yuan.jpg" alt="作者的图片"/>
+        
+            <h4 id="about-card-name">Yuan Shen</h4>
+        
+            <div id="about-card-bio"><p>author.bio</p>
+</div>
+        
+        
+            <div id="about-card-job">
+                <i class="fa fa-briefcase"></i>
+                <br/>
+                <p>author.job</p>
+
+            </div>
+        
+        
+    </div>
+</div>
+
+        
+        
+<div id="cover" style="background-image:url('/assets/images/cover.jpg');"></div>
+        <!--SCRIPTS-->
+<script src="/assets/js/script-vufjrm3fmbuttogo1hxuu0w9w0sesk5iyysjuguc2hdhufot9szxg8twijry.min.js"></script>
+<!--SCRIPTS END-->
+
+
+
+    </body>
+</html>
