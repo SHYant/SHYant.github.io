@@ -1,0 +1,306 @@
+
+<!DOCTYPE html>
+<html lang="zh-cn">
+    
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="generator" content="Ant Park">
+    <title>古典密码学① - Ant Park</title>
+    <meta name="author" content="Yuan Shen">
+    
+    
+        <link rel="icon" href="http://yoursite.com/assets/images/yuan.png">
+    
+    
+    <script type="application/ld+json">{"@context":"http://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Yuan Shen","sameAs":[],"image":"yuan.jpg"},"articleBody":"初级密码学题，由蓝鲸安全平台提供\n题目：培根的愤怒，文件中包含两个文件RSA.txt和bacon.docx\n知识点：RSA加密，bacon密码\n\n\n背景知识培根密码培根密码是以他的发明者而命名的—-英国人 弗朗西斯.培根，他使用二进制的思想制作了培根密码，但是却讲普通的二进制的0和1替换成a和b。让密码变得看上去很普通不会一起过多的主要。\n培根密码也同样有两种编码模式密码表（大小写不同）：\n第一种密码表：\n\n第二种密码表：\n\n当这种密码出现后，人们当然遵从培根替换二进制元素的思想，对培根进行了各种各样的变化与进化。例如：可以用两种字体表示a和b，也可以用字体大小写等不同的两种表达方式来代替a和b字母。（密文：SuLyi XuanQ uJuZi HEwEN  按照大小写表示a和b，明文：LOVE）\n题目解析RSA打开.txt文件发现\n1234e=65537d=1764836219594882187843234147880131121771889292946179667759840214035309185449143902593959870508966515039587677582858798736388141160230363016947313129036070636861863062274037967590147497869727514848002031984248933650359661708519627935253774817417127743601824768881728368241731993209298718491920343736819541250453047663176408059126018948310585981572755980858657248028686387003137268571851611561132111915826966459925826207250507344818626890563618085762697380861169320463283242104640942973559724123517932751088369262105675358771667412984908724301206109885898719604228198681639407843267405644475201507847567204728939638145n=20136154478340841564185591286493759284046711105817161714132424809754884764411654586403263933416806841251646522588408268242804597356897162437617698561566323350977701864946661957164954137863567573223103964162904311393388083111290190806533189451439119243111558126427895555267825494247529615913123880132301928087149633155689369834486059262333901654707896271411583403909233265498204545037789075685761561868755049395178667956582626590509735929833007473306687014665509839236897398732632601168593411571576144377460423772237026851061695263350092752542823717948134419111797673566903960499882658784242463197583753031104747152067c=22F4ECF53A876B17DA59DFA44235B8AB08F93D337D79427B13BC3036933FC850E0697926C625B6DCD5D21955D2BB43CB5348197FA6F79C74424D13B0157914E81BF462FF96FABF9E152284732C12148C4FAAF3FD04BDE5E97DCAE7DD41046BD7340FE024767003DC79B5CABD50738886F54D8FFDC2B81AD57EDEF35AD54D58B7BD9A15380BF5BB88A82EEF4148C4EE27589122C9FC9E9BEE94B235FD8FA77C431290A56BC13269FD1171AF8A382A3A6919C7F2B1CC8758DB0AE9982BB02EB37499F211D215C9C62CFE379ED63EC248939458D7498E224F6FA13F816E54504986B8CC391160CB527D4D54DB7B23CC7C29420B996D168E5C6990DBA72E9FA93C37\nE表示公钥\nD表示私钥\nN表示模数\nC表示为密文\n直接运行解密脚本\n1234567891011121314import gmpy2import binasciid = 1764836219594882187843234147880131121771889292946179667759840214035309185449143902593959870508966515039587677582858798736388141160230363016947313129036070636861863062274037967590147497869727514848002031984248933650359661708519627935253774817417127743601824768881728368241731993209298718491920343736819541250453047663176408059126018948310585981572755980858657248028686387003137268571851611561132111915826966459925826207250507344818626890563618085762697380861169320463283242104640942973559724123517932751088369262105675358771667412984908724301206109885898719604228198681639407843267405644475201507847567204728939638145n = 20136154478340841564185591286493759284046711105817161714132424809754884764411654586403263933416806841251646522588408268242804597356897162437617698561566323350977701864946661957164954137863567573223103964162904311393388083111290190806533189451439119243111558126427895555267825494247529615913123880132301928087149633155689369834486059262333901654707896271411583403909233265498204545037789075685761561868755049395178667956582626590509735929833007473306687014665509839236897398732632601168593411571576144377460423772237026851061695263350092752542823717948134419111797673566903960499882658784242463197583753031104747152067c = 0x22F4ECF53A876B17DA59DFA44235B8AB08F93D337D79427B13BC3036933FC850E0697926C625B6DCD5D21955D2BB43CB5348197FA6F79C74424D13B0157914E81BF462FF96FABF9E152284732C12148C4FAAF3FD04BDE5E97DCAE7DD41046BD7340FE024767003DC79B5CABD50738886F54D8FFDC2B81AD57EDEF35AD54D58B7BD9A15380BF5BB88A82EEF4148C4EE27589122C9FC9E9BEE94B235FD8FA77C431290A56BC13269FD1171AF8A382A3A6919C7F2B1CC8758DB0AE9982BB02EB37499F211D215C9C62CFE379ED63EC248939458D7498E224F6FA13F816E54504986B8CC391160CB527D4D54DB7B23CC7C29420B996D168E5C6990DBA72E9FA93C37m = pow(c,d,n)print(hex(m).replace(\"L\",\"\"))b = hex(m).replace(\"L\",\"\")b = b[2:]c = binascii.a2b_hex(b)print(c)\n结果得：\n120x7768616c65435446435231707430whaleCTFCR1pt0\n利用解密后得到的明文就是bacon.docx的加密文档密码，成功打开一个“空”文档。\n打开word后，没有任何内容，全选也无法看到。猜想是字体隐藏，于是关闭隐藏后能够看到换行符。\n\n全选之后发现有内容，然后讲字体颜色更改后得到字符串。\n\n结合培根密码，发现题中是用斜体表示的培根密码（正常为a，斜体为b），讲培根密码还原\n\n最终通过脚本或者在线的解密可以得到flag\n\n培根密码解密脚本：\n123456789101112131415161718192021222324252627282930313233343536373839404142434445464748495051525354555657#!/usr/bin/python# -*- coding: utf-8 -*-import realphabet = ['a','b','c','d','e','f','g','h','i','j','k','l','m','n','o','p','q','r','s','t','u','v','w','x','y','z']first_cipher = [\"aaaaa\",\"aaaab\",\"aaaba\",\"aaabb\",\"aabaa\",\"aabab\",\"aabba\",\"aabbb\",\"abaaa\",\"abaab\",\"ababa\",\"ababb\",\"abbaa\",\"abbab\",\"abbba\",\"abbbb\",\"baaaa\",\"baaab\",\"baaba\",\"baabb\",\"babaa\",\"babab\",\"babba\",\"babbb\",\"bbaaa\",\"bbaab\"]second_cipher = [\"aaaaa\",\"aaaab\",\"aaaba\",\"aaabb\",\"aabaa\",\"aabab\",\"aabba\",\"aabbb\",\"abaaa\",\"abaaa\",\"abaab\",\"ababa\",\"ababb\",\"abbaa\",\"abbab\",\"abbba\",\"abbbb\",\"baaaa\",\"baaab\",\"baaba\",\"baabb\",\"baabb\",\"babaa\",\"babab\",\"babba\",\"babbb\"]def encode():    string = raw_input(\"please input string to encode:\\n\")    e_string1 = \"\"    e_string2 = \"\"    for index in string:        for i in range(0,26):            if index == alphabet[i]:                e_string1 += first_cipher[i]                e_string2 += second_cipher[i]                break    print \"first encode method result is:\\n\"+e_string1    print \"second encode method result is:\\n\"+e_string2    returndef decode():    e_string = raw_input(\"please input string to decode:\\n\")    e_array = re.findall(\".&#123;5&#125;\",e_string)    d_string1 = \"\"    d_string2 = \"\"    for index in e_array:        for i in range(0,26):            if index == first_cipher[i]:                d_string1 += alphabet[i]            if index == second_cipher[i]:                d_string2 += alphabet[i]    print \"first decode method result is:\\n\"+d_string1    print \"second decode method result is:\\n\"+d_string2    returnif __name__ == '__main__':    while True:        print \"\\t*******Bacon Encode_Decode System*******\"        print \"input should be lowercase,cipher just include a b\"        print \"1.encode\\n2.decode\\n3.exit\"        s_number = raw_input(\"please input number to choose\\n\")        if s_number == \"1\":            encode()            raw_input()        elif s_number == \"2\":            decode()            raw_input()        elif s_number == \"3\":            break        else:            continue\n总结本题相对简单，主要是介绍古典密码学中培根密码，至于RSA非对称加密，之后我会专门写一篇相关介绍以及分析各种RSA题型。\n","dateCreated":"2018-11-09T10:59:29+08:00","dateModified":"2018-11-09T12:17:38+08:00","datePublished":"2018-11-09T10:59:29+08:00","description":"初级密码学题，由蓝鲸安全平台提供\n题目：培根的愤怒，文件中包含两个文件RSA.txt和bacon.docx\n知识点：RSA加密，bacon密码","headline":"古典密码学①","image":["https://ws2.sinaimg.cn/large/0069RVTdly1fv9d6x9yhjj30o60iqau7.jpg","https://ws3.sinaimg.cn/large/0069RVTdly1fv9d1artqxj31kw1z4kjp.jpg"],"mainEntityOfPage":{"@type":"WebPage","@id":"http://yoursite.com/2018/11/09/古典密码学①/"},"publisher":{"@type":"Organization","name":"Yuan Shen","sameAs":[],"image":"yuan.jpg","logo":{"@type":"ImageObject","url":"yuan.jpg"}},"url":"http://yoursite.com/2018/11/09/古典密码学①/","keywords":"Crypto, rsa, 培根密码","thumbnailUrl":"https://ws2.sinaimg.cn/large/0069RVTdly1fv9d6x9yhjj30o60iqau7.jpg"}</script>
+    <meta name="description" content="初级密码学题，由蓝鲸安全平台提供 题目：培根的愤怒，文件中包含两个文件RSA.txt和bacon.docx 知识点：RSA加密，bacon密码">
+<meta name="keywords" content="Crypto,rsa,培根密码">
+<meta property="og:type" content="blog">
+<meta property="og:title" content="古典密码学①">
+<meta property="og:url" content="http://yoursite.com/2018/11/09/古典密码学①/index.html">
+<meta property="og:site_name" content="Ant Park">
+<meta property="og:description" content="初级密码学题，由蓝鲸安全平台提供 题目：培根的愤怒，文件中包含两个文件RSA.txt和bacon.docx 知识点：RSA加密，bacon密码">
+<meta property="og:locale" content="zh-cn">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/006tNbRwly1fx1nwv8nvnj30tc06qqak.jpg">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/006tNbRwly1fx1nxohmo4j30i209maia.jpg">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/006tNbRwly1fx1ocycm95j30cy078jt3.jpg">
+<meta property="og:image" content="https://ws2.sinaimg.cn/large/006tNbRwly1fx1oezxw8jj30ly0ba7a4.jpg">
+<meta property="og:image" content="https://ws3.sinaimg.cn/large/006tNbRwly1fx1ogu4blgj30k204otbt.jpg">
+<meta property="og:image" content="https://ws3.sinaimg.cn/large/006tNbRwly1fx1ohoyogij30j609ajys.jpg">
+<meta property="og:updated_time" content="2018-11-09T04:17:38.117Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="古典密码学①">
+<meta name="twitter:description" content="初级密码学题，由蓝鲸安全平台提供 题目：培根的愤怒，文件中包含两个文件RSA.txt和bacon.docx 知识点：RSA加密，bacon密码">
+<meta name="twitter:image" content="https://ws1.sinaimg.cn/large/006tNbRwly1fx1nwv8nvnj30tc06qqak.jpg">
+    
+    
+        
+    
+    
+        <meta property="og:image" content="http://yoursite.com/assets/images/yuan.jpg"/>
+    
+    
+        <meta property="og:image" content="https://ws2.sinaimg.cn/large/0069RVTdly1fv9d6x9yhjj30o60iqau7.jpg"/>
+        <meta class="swiftype" name="image" data-type="enum" content="https://ws2.sinaimg.cn/large/0069RVTdly1fv9d6x9yhjj30o60iqau7.jpg" />
+    
+    
+        <meta property="og:image" content="https://ws3.sinaimg.cn/large/0069RVTdly1fv9d1artqxj31kw1z4kjp.jpg"/>
+        <meta class="swiftype" name="image" data-type="enum" content="https://ws3.sinaimg.cn/large/0069RVTdly1fv9d1artqxj31kw1z4kjp.jpg" />
+    
+    
+    <!--STYLES-->
+    <link rel="stylesheet" href="/assets/css/style-du2xmrqdqrl2ollgeiw050kpl6l4nbyz7bumjuurjgsxyopifvukebxc9lqe.min.css">
+    <!--STYLES END-->
+    
+
+    
+</head>
+
+    <body>
+        <div id="blog">
+            <!-- Define author's picture -->
+
+
+    
+        
+            
+        
+    
+
+<header id="header" data-behavior="4">
+    <i id="btn-open-sidebar" class="fa fa-lg fa-bars"></i>
+    <div class="header-title">
+        <a class="header-title-link" href="/ ">Ant Park</a>
+    </div>
+    
+        
+            <a  class="header-right-picture "
+                href="#about">
+        
+        
+            <img class="header-picture" src="/assets/images/yuan.jpg" alt="作者的图片"/>
+        
+        </a>
+    
+</header>
+
+            <!-- Define author's picture -->
+
+
+
+        
+    
+
+<nav id="sidebar" data-behavior="4">
+    <div class="sidebar-container">
+        
+            <div class="sidebar-profile">
+                <a href="/#about">
+                    <img class="sidebar-profile-picture" src="/assets/images/yuan.jpg" alt="作者的图片"/>
+                </a>
+                <h4 class="sidebar-profile-name">Yuan Shen</h4>
+                
+                    <h5 class="sidebar-profile-bio"><p>author.bio</p>
+</h5>
+                
+            </div>
+        
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/ "
+                            
+                            title="首页"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-home" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">首页</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-categories"
+                            
+                            title="分类"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-bookmark" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">分类</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-tags"
+                            
+                            title="标签"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-tags" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">标签</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-archives"
+                            
+                            title="归档"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-archive" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">归档</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+    </div>
+</nav>
+
+            
+        <div class="post-header-cover
+                    text-center
+                    post-header-cover--partial"
+             style="background-image:url('https://ws3.sinaimg.cn/large/0069RVTdly1fv9d1artqxj31kw1z4kjp.jpg');"
+             data-behavior="4">
+            
+        </div>
+
+            <div id="main" data-behavior="4"
+                 class="hasCover
+                        hasCoverMetaOut
+                        hasCoverCaption">
+                
+<article class="post">
+    
+        <span class="post-header-cover-caption caption">Lonely</span>
+    
+    
+        <div class="post-header main-content-wrap text-center">
+    
+        <h1 class="post-title">
+            古典密码学①
+        </h1>
+    
+    
+</div>
+
+    
+    <div class="post-content markdown">
+        <div class="main-content-wrap">
+            <p>初级密码学题，由蓝鲸安全平台提供</p>
+<p>题目：培根的愤怒，文件中包含两个文件RSA.txt和bacon.docx</p>
+<p>知识点：RSA加密，bacon密码</p>
+<a id="more"></a>
+<h1 id="table-of-contents">目录</h1><ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#背景知识"><span class="toc-text">背景知识</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#培根密码"><span class="toc-text">培根密码</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#题目解析"><span class="toc-text">题目解析</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#RSA"><span class="toc-text">RSA</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#总结"><span class="toc-text">总结</span></a></li></ol></li></ol>
+<h2 id="背景知识"><a href="#背景知识" class="headerlink" title="背景知识"></a>背景知识</h2><h3 id="培根密码"><a href="#培根密码" class="headerlink" title="培根密码"></a>培根密码</h3><p>培根密码是以他的发明者而命名的—-英国人 弗朗西斯.培根，他使用二进制的思想制作了培根密码，但是却讲普通的二进制的0和1替换成a和b。让密码变得看上去很普通不会一起过多的主要。</p>
+<p>培根密码也同样有<strong>两种</strong>编码模式密码表（大小写不同）：</p>
+<p>第一种密码表：</p>
+<p><img src="https://ws1.sinaimg.cn/large/006tNbRwly1fx1nwv8nvnj30tc06qqak.jpg" alt=""></p>
+<p>第二种密码表：</p>
+<p><img src="https://ws1.sinaimg.cn/large/006tNbRwly1fx1nxohmo4j30i209maia.jpg" alt=""></p>
+<p>当这种密码出现后，人们当然遵从培根替换二进制元素的思想，对培根进行了各种各样的变化与进化。例如：可以用两种字体表示a和b，也可以用字体大小写等不同的两种表达方式来代替a和b字母。（密文：SuLyi XuanQ uJuZi HEwEN  按照大小写表示a和b，明文：LOVE）</p>
+<h2 id="题目解析"><a href="#题目解析" class="headerlink" title="题目解析"></a>题目解析</h2><h3 id="RSA"><a href="#RSA" class="headerlink" title="RSA"></a>RSA</h3><p>打开.txt文件发现</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">e=65537</span><br><span class="line">d=1764836219594882187843234147880131121771889292946179667759840214035309185449143902593959870508966515039587677582858798736388141160230363016947313129036070636861863062274037967590147497869727514848002031984248933650359661708519627935253774817417127743601824768881728368241731993209298718491920343736819541250453047663176408059126018948310585981572755980858657248028686387003137268571851611561132111915826966459925826207250507344818626890563618085762697380861169320463283242104640942973559724123517932751088369262105675358771667412984908724301206109885898719604228198681639407843267405644475201507847567204728939638145</span><br><span class="line">n=20136154478340841564185591286493759284046711105817161714132424809754884764411654586403263933416806841251646522588408268242804597356897162437617698561566323350977701864946661957164954137863567573223103964162904311393388083111290190806533189451439119243111558126427895555267825494247529615913123880132301928087149633155689369834486059262333901654707896271411583403909233265498204545037789075685761561868755049395178667956582626590509735929833007473306687014665509839236897398732632601168593411571576144377460423772237026851061695263350092752542823717948134419111797673566903960499882658784242463197583753031104747152067</span><br><span class="line">c=22F4ECF53A876B17DA59DFA44235B8AB08F93D337D79427B13BC3036933FC850E0697926C625B6DCD5D21955D2BB43CB5348197FA6F79C74424D13B0157914E81BF462FF96FABF9E152284732C12148C4FAAF3FD04BDE5E97DCAE7DD41046BD7340FE024767003DC79B5CABD50738886F54D8FFDC2B81AD57EDEF35AD54D58B7BD9A15380BF5BB88A82EEF4148C4EE27589122C9FC9E9BEE94B235FD8FA77C431290A56BC13269FD1171AF8A382A3A6919C7F2B1CC8758DB0AE9982BB02EB37499F211D215C9C62CFE379ED63EC248939458D7498E224F6FA13F816E54504986B8CC391160CB527D4D54DB7B23CC7C29420B996D168E5C6990DBA72E9FA93C37</span><br></pre></td></tr></table></figure>
+<p>E表示公钥</p>
+<p>D表示私钥</p>
+<p>N表示模数</p>
+<p>C表示为密文</p>
+<p>直接运行解密脚本</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">import</span> gmpy2</span><br><span class="line"><span class="keyword">import</span> binascii</span><br><span class="line">d = <span class="number">1764836219594882187843234147880131121771889292946179667759840214035309185449143902593959870508966515039587677582858798736388141160230363016947313129036070636861863062274037967590147497869727514848002031984248933650359661708519627935253774817417127743601824768881728368241731993209298718491920343736819541250453047663176408059126018948310585981572755980858657248028686387003137268571851611561132111915826966459925826207250507344818626890563618085762697380861169320463283242104640942973559724123517932751088369262105675358771667412984908724301206109885898719604228198681639407843267405644475201507847567204728939638145</span></span><br><span class="line"></span><br><span class="line">n = <span class="number">20136154478340841564185591286493759284046711105817161714132424809754884764411654586403263933416806841251646522588408268242804597356897162437617698561566323350977701864946661957164954137863567573223103964162904311393388083111290190806533189451439119243111558126427895555267825494247529615913123880132301928087149633155689369834486059262333901654707896271411583403909233265498204545037789075685761561868755049395178667956582626590509735929833007473306687014665509839236897398732632601168593411571576144377460423772237026851061695263350092752542823717948134419111797673566903960499882658784242463197583753031104747152067</span></span><br><span class="line"></span><br><span class="line">c = <span class="number">0x22F4ECF53A876B17DA59DFA44235B8AB08F93D337D79427B13BC3036933FC850E0697926C625B6DCD5D21955D2BB43CB5348197FA6F79C74424D13B0157914E81BF462FF96FABF9E152284732C12148C4FAAF3FD04BDE5E97DCAE7DD41046BD7340FE024767003DC79B5CABD50738886F54D8FFDC2B81AD57EDEF35AD54D58B7BD9A15380BF5BB88A82EEF4148C4EE27589122C9FC9E9BEE94B235FD8FA77C431290A56BC13269FD1171AF8A382A3A6919C7F2B1CC8758DB0AE9982BB02EB37499F211D215C9C62CFE379ED63EC248939458D7498E224F6FA13F816E54504986B8CC391160CB527D4D54DB7B23CC7C29420B996D168E5C6990DBA72E9FA93C37</span></span><br><span class="line"></span><br><span class="line">m = pow(c,d,n)</span><br><span class="line">print(hex(m).replace(<span class="string">"L"</span>,<span class="string">""</span>))</span><br><span class="line">b = hex(m).replace(<span class="string">"L"</span>,<span class="string">""</span>)</span><br><span class="line">b = b[<span class="number">2</span>:]</span><br><span class="line">c = binascii.a2b_hex(b)</span><br><span class="line">print(c)</span><br></pre></td></tr></table></figure>
+<p>结果得：</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">0x7768616c65435446435231707430</span><br><span class="line">whaleCTFCR1pt0</span><br></pre></td></tr></table></figure>
+<p>利用解密后得到的明文就是bacon.docx的加密文档密码，成功打开一个“空”文档。</p>
+<p>打开word后，没有任何内容，全选也无法看到。猜想是字体隐藏，于是关闭隐藏后能够看到换行符。</p>
+<p><img src="https://ws1.sinaimg.cn/large/006tNbRwly1fx1ocycm95j30cy078jt3.jpg" alt=""></p>
+<p>全选之后发现有内容，然后讲字体颜色更改后得到字符串。</p>
+<p><img src="https://ws2.sinaimg.cn/large/006tNbRwly1fx1oezxw8jj30ly0ba7a4.jpg" alt=""></p>
+<p>结合培根密码，发现题中是用斜体表示的培根密码（正常为a，斜体为b），讲培根密码还原</p>
+<p><img src="https://ws3.sinaimg.cn/large/006tNbRwly1fx1ogu4blgj30k204otbt.jpg" alt=""></p>
+<p>最终通过脚本或者在线的解密可以得到flag</p>
+<p><img src="https://ws3.sinaimg.cn/large/006tNbRwly1fx1ohoyogij30j609ajys.jpg" alt=""></p>
+<p>培根密码解密脚本：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">#!/usr/bin/python</span></span><br><span class="line"><span class="comment"># -*- coding: utf-8 -*-</span></span><br><span class="line"><span class="keyword">import</span> re</span><br><span class="line"></span><br><span class="line">alphabet = [<span class="string">'a'</span>,<span class="string">'b'</span>,<span class="string">'c'</span>,<span class="string">'d'</span>,<span class="string">'e'</span>,<span class="string">'f'</span>,<span class="string">'g'</span>,<span class="string">'h'</span>,<span class="string">'i'</span>,<span class="string">'j'</span>,<span class="string">'k'</span>,<span class="string">'l'</span>,<span class="string">'m'</span>,<span class="string">'n'</span>,<span class="string">'o'</span>,<span class="string">'p'</span>,<span class="string">'q'</span>,<span class="string">'r'</span>,<span class="string">'s'</span>,<span class="string">'t'</span>,<span class="string">'u'</span>,<span class="string">'v'</span>,<span class="string">'w'</span>,<span class="string">'x'</span>,<span class="string">'y'</span>,<span class="string">'z'</span>]</span><br><span class="line"></span><br><span class="line">first_cipher = [<span class="string">"aaaaa"</span>,<span class="string">"aaaab"</span>,<span class="string">"aaaba"</span>,<span class="string">"aaabb"</span>,<span class="string">"aabaa"</span>,<span class="string">"aabab"</span>,<span class="string">"aabba"</span>,<span class="string">"aabbb"</span>,<span class="string">"abaaa"</span>,<span class="string">"abaab"</span>,<span class="string">"ababa"</span>,<span class="string">"ababb"</span>,<span class="string">"abbaa"</span>,<span class="string">"abbab"</span>,<span class="string">"abbba"</span>,<span class="string">"abbbb"</span>,<span class="string">"baaaa"</span>,<span class="string">"baaab"</span>,<span class="string">"baaba"</span>,<span class="string">"baabb"</span>,<span class="string">"babaa"</span>,<span class="string">"babab"</span>,<span class="string">"babba"</span>,<span class="string">"babbb"</span>,<span class="string">"bbaaa"</span>,<span class="string">"bbaab"</span>]</span><br><span class="line"></span><br><span class="line">second_cipher = [<span class="string">"aaaaa"</span>,<span class="string">"aaaab"</span>,<span class="string">"aaaba"</span>,<span class="string">"aaabb"</span>,<span class="string">"aabaa"</span>,<span class="string">"aabab"</span>,<span class="string">"aabba"</span>,<span class="string">"aabbb"</span>,<span class="string">"abaaa"</span>,<span class="string">"abaaa"</span>,<span class="string">"abaab"</span>,<span class="string">"ababa"</span>,<span class="string">"ababb"</span>,<span class="string">"abbaa"</span>,<span class="string">"abbab"</span>,<span class="string">"abbba"</span>,<span class="string">"abbbb"</span>,<span class="string">"baaaa"</span>,<span class="string">"baaab"</span>,<span class="string">"baaba"</span>,<span class="string">"baabb"</span>,<span class="string">"baabb"</span>,<span class="string">"babaa"</span>,<span class="string">"babab"</span>,<span class="string">"babba"</span>,<span class="string">"babbb"</span>]</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">encode</span><span class="params">()</span>:</span></span><br><span class="line">    string = raw_input(<span class="string">"please input string to encode:\n"</span>)</span><br><span class="line">    e_string1 = <span class="string">""</span></span><br><span class="line">    e_string2 = <span class="string">""</span></span><br><span class="line">    <span class="keyword">for</span> index <span class="keyword">in</span> string:</span><br><span class="line">        <span class="keyword">for</span> i <span class="keyword">in</span> range(<span class="number">0</span>,<span class="number">26</span>):</span><br><span class="line">            <span class="keyword">if</span> index == alphabet[i]:</span><br><span class="line">                e_string1 += first_cipher[i]</span><br><span class="line">                e_string2 += second_cipher[i]</span><br><span class="line">                <span class="keyword">break</span></span><br><span class="line">    <span class="keyword">print</span> <span class="string">"first encode method result is:\n"</span>+e_string1</span><br><span class="line">    <span class="keyword">print</span> <span class="string">"second encode method result is:\n"</span>+e_string2</span><br><span class="line">    <span class="keyword">return</span></span><br><span class="line"></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">decode</span><span class="params">()</span>:</span></span><br><span class="line">    e_string = raw_input(<span class="string">"please input string to decode:\n"</span>)</span><br><span class="line">    e_array = re.findall(<span class="string">".&#123;5&#125;"</span>,e_string)</span><br><span class="line">    d_string1 = <span class="string">""</span></span><br><span class="line">    d_string2 = <span class="string">""</span></span><br><span class="line">    <span class="keyword">for</span> index <span class="keyword">in</span> e_array:</span><br><span class="line">        <span class="keyword">for</span> i <span class="keyword">in</span> range(<span class="number">0</span>,<span class="number">26</span>):</span><br><span class="line">            <span class="keyword">if</span> index == first_cipher[i]:</span><br><span class="line">                d_string1 += alphabet[i]</span><br><span class="line">            <span class="keyword">if</span> index == second_cipher[i]:</span><br><span class="line">                d_string2 += alphabet[i]</span><br><span class="line">    <span class="keyword">print</span> <span class="string">"first decode method result is:\n"</span>+d_string1</span><br><span class="line">    <span class="keyword">print</span> <span class="string">"second decode method result is:\n"</span>+d_string2</span><br><span class="line">    <span class="keyword">return</span></span><br><span class="line"></span><br><span class="line"></span><br><span class="line"><span class="keyword">if</span> __name__ == <span class="string">'__main__'</span>:</span><br><span class="line">    <span class="keyword">while</span> <span class="keyword">True</span>:</span><br><span class="line">        <span class="keyword">print</span> <span class="string">"\t*******Bacon Encode_Decode System*******"</span></span><br><span class="line">        <span class="keyword">print</span> <span class="string">"input should be lowercase,cipher just include a b"</span></span><br><span class="line">        <span class="keyword">print</span> <span class="string">"1.encode\n2.decode\n3.exit"</span></span><br><span class="line">        s_number = raw_input(<span class="string">"please input number to choose\n"</span>)</span><br><span class="line">        <span class="keyword">if</span> s_number == <span class="string">"1"</span>:</span><br><span class="line">            encode()</span><br><span class="line">            raw_input()</span><br><span class="line">        <span class="keyword">elif</span> s_number == <span class="string">"2"</span>:</span><br><span class="line">            decode()</span><br><span class="line">            raw_input()</span><br><span class="line">        <span class="keyword">elif</span> s_number == <span class="string">"3"</span>:</span><br><span class="line">            <span class="keyword">break</span></span><br><span class="line">        <span class="keyword">else</span>:</span><br><span class="line">            <span class="keyword">continue</span></span><br></pre></td></tr></table></figure>
+<h3 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h3><p>本题相对简单，主要是介绍古典密码学中培根密码，至于RSA非对称加密，之后我会专门写一篇相关介绍以及分析各种RSA题型。</p>
+
+            
+
+        </div>
+    </div>
+    <div id="post-footer" class="post-footer main-content-wrap">
+        
+            <div class="post-footer-tags">
+                <span class="text-color-light text-small">标签</span><br/>
+                
+    <a class="tag tag--primary tag--small t-link" href="/tags/Crypto/">Crypto</a> <a class="tag tag--primary tag--small t-link" href="/tags/rsa/">rsa</a> <a class="tag tag--primary tag--small t-link" href="/tags/培根密码/">培根密码</a>
+
+            </div>
+        
+        
+        
+    </div>
+</article>
+
+
+
+                <footer id="footer" class="main-content-wrap">
+    <span class="copyrights">
+        Copyrights &copy; 2018 Yuan Shen. All Rights Reserved.
+    </span>
+</footer>
+
+            </div>
+            
+        </div>
+        
+
+
+    
+        
+    
+
+<div id="about">
+    <div id="about-card">
+        <div id="about-btn-close">
+            <i class="fa fa-times"></i>
+        </div>
+        
+            <img id="about-card-picture" src="/assets/images/yuan.jpg" alt="作者的图片"/>
+        
+            <h4 id="about-card-name">Yuan Shen</h4>
+        
+            <div id="about-card-bio"><p>author.bio</p>
+</div>
+        
+        
+            <div id="about-card-job">
+                <i class="fa fa-briefcase"></i>
+                <br/>
+                <p>author.job</p>
+
+            </div>
+        
+        
+    </div>
+</div>
+
+        
+        
+<div id="cover" style="background-image:url('/assets/images/cover.jpg');"></div>
+        <!--SCRIPTS-->
+<script src="/assets/js/script-vufjrm3fmbuttogo1hxuu0w9w0sesk5iyysjuguc2hdhufot9szxg8twijry.min.js"></script>
+<!--SCRIPTS END-->
+
+
+
+    </body>
+</html>

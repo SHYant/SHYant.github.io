@@ -1,0 +1,312 @@
+
+<!DOCTYPE html>
+<html lang="zh-cn">
+    
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="generator" content="Ant Park">
+    <title>PHP反序列化漏洞 - Ant Park</title>
+    <meta name="author" content="Yuan Shen">
+    
+    
+        <link rel="icon" href="http://yoursite.com/assets/images/yuan.png">
+    
+    
+    <script type="application/ld+json">{"@context":"http://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Yuan Shen","sameAs":[],"image":"yuan.jpg"},"articleBody":"一道简单的web题，由蓝鲸安全平台提供\n题目：为什么后台无法登录了？好像增加了cookie也不能登录，答题地址：http://ctf.whaledu.com:10802/23h72gdsi8/\n\n\n背景知识PHP反序列化漏洞虽然利用的条件比较苛刻，但是如果可以利用一般都会产生很严重的后果，而且该知识点在CTF考题中屡考不鲜，它相对weblogic等java项目的反序列化漏洞利用起来相对简单，更加灵活。通常来说，PHP反序列化就是一种针对php对象的注入漏洞。\n什么是PHP序列化（serialize）与反序列化（unserialize）一个对象在某个php中可以调用，但是它不能穿越“时空”的限制跑到另一个网站或者页面中去使用。为了解决这个问题，于是就为php对象构建了一种“时光机”，也就是序列化：serialize，它可以将任意对象转变为一个静态的字符串，因此，对象就可以作为一个简单的变量出入任何需要它的php中了。\n反序列化就是一个php序列化时光机的接收器，通过它可以将静态序列还原为原本对象的样子。\n举个栗子：我们用一下代码来序列化几个对象（字符串，数字，一个只有变量的类和一个有函数的类）。\n12345678910111213141516171819202122&lt;?php$str = \"hello,world!\";$arr = array(\"name\"=&gt;\"hello\", \"id\"=&gt;1);class A&#123;    public $a = 123;&#125;class B&#123;    public $b = 123;    public function world()&#123;        $b = 111;    &#125;&#125;$a = new A();$b = new B();echo 'str- '.serialize($str);echo \"&lt;/br&gt;\";echo 'arr- '.serialize($arr);echo \"&lt;/br&gt;\";echo 'classA- '.serialize($a);echo \"&lt;/br&gt;\";echo 'classB- '.serialize($b);?&gt;\n运行结果：序列化后的格式如下\n1234str- s:12:\"hello,world!\";arr- a:2:&#123;s:4:\"name\";s:5:\"hello\";s:2:\"id\";i:1;&#125;classA- O:1:\"A\":1:&#123;s:1:\"a\";i:123;&#125;classB- O:1:\"B\":1:&#123;s:1:\"b\";i:123;&#125;\n1、首先按照序列对象的包含结构层层递进（树状结构），如果是一个数组，先列出数组和其中元素，并对其中的元素一一枚举。\n2、每个子对象包含三个特征：类型（s:string, a:array, O:class(object)….）、长度、值。\n3、类的序列化只会保存所有变量，但是不会保存对象的方法（函数），所有可以看到A和B的序列化没有区别。\n这里以第三行classA为例进行讲解：O代表存储的是对象（object），如果给serialize()传入的是一个数组为a，传入字符为s；1表示对象的名称有1个字符。“A”表示对象的名称。1表示有一个值。{s:1:&quot;a&quot;;i:123;}中，s表示字符串，1表示该字符串的长度，“a”为字符串的名称，之后的类似。\nPHP反序列化漏洞反序列化的根源在于unserialize()函数的参数是可控的，我们可以通过传入一个精心构造的序列化字符串，从而控制对象内部的变量甚至是函数。如果\nMagic Functionphp中有一类特殊的方法叫Magic function， 这里我们着重关注一下几个：\n\n构造函数__construct()：当对象创建(new)时会自动调用。但在unserialize()时是不会自动调用的。\n析构函数__destruct()：当对象被销毁时会自动调用。\n__wakeup() ：如前所提，unserialize()时会自动调用\n\n1234567891011121314151617181920212223&lt;?phpclass chybeta&#123;\tvar $test = '123';\tfunction __wakeup()&#123;\t\techo \"__wakeup\";\t\techo \"&lt;/br&gt;\";\t&#125;\tfunction __construct()&#123;\t\techo \"__construct\";\t\techo \"&lt;/br&gt;\";\t&#125;\tfunction __destruct()&#123;\t\techo \"__destruct\";\t\techo \"&lt;/br&gt;\";\t&#125;&#125;$class2 = 'O:7:\"chybeta\":1:&#123;s:4:\"test\";s:3:\"123\";&#125;';\tprint_r($class2);echo \"&lt;/br&gt;\";$class2_unser = unserialize($class2);print_r($class2_unser);echo \"&lt;/br&gt;\";?&gt;\n运行结果：\n1234O:7:\"chybeta\":1:&#123;s:4:\"test\";s:3:\"123\";&#125;__wakeupchybeta Object ( [test] =&gt; 123 ) __destruct\n题目解析访问解题网站，发现是个登录窗口，可是在输入信息之后点击login没有任何反应。查看源码，发现了是个假的表单，然后有一个提示参数hint。\n123456789101112131415161718&lt;html&gt;&lt;head&gt;&lt;meta http-equiv=\"Content-Type\" content=\"text/html; charset=UTF-8\"&gt;&lt;title&gt;Login&lt;/title&gt;&lt;link rel=\"stylesheet\" href=\"admin.css\" type=\"text/css\"&gt;&lt;/head&gt;&lt;body&gt;&lt;br&gt;&lt;div class=\"container\" align=\"center\"&gt;  &lt;form method=\"POST\" action=\"#\"&gt;    &lt;p&gt;&lt;input name=\"user\" type=\"text\" placeholder=\"Username\"&gt;&lt;/p&gt;    &lt;p&gt;&lt;input name=\"password\" type=\"password\" placeholder=\"Password\"&gt;&lt;/p&gt;    &lt;p&gt;&lt;input value=\"Login\" type=\"button\"/&gt;&lt;/p&gt;  &lt;/form&gt;&lt;!--hint:paramenter:hint--&gt;&lt;/div&gt;&lt;/body&gt;&lt;/html&gt;\n尝试get、post、cookie参数，在get参数中提交hint=1得到源码\n123456789101112131415161718192021&lt;?php error_reporting(0); include_once(\"flag.php\"); $cookie = $_COOKIE['Whale']; if(isset($_GET['hint']))&#123;     show_source(__FILE__); &#125; elseif (unserialize($cookie) === \"$KEY\") &#123;        echo \"$flag\"; &#125; else &#123; ?&gt;     &lt;?php &#125; $KEY='Whale:www.whalectf.com'; ?&gt;\n找到重要代码段，有unserialize函数，考察反序列化。需要提交一个cookie反序列化后和“$KEY”相等。\n我们还看到最下方的$KEY变量定义，只需要复制所有源码，然后利用serialize序列化一下就好。先看一下直接对KEY的序列化\n\n但是递交并不正确，所有仔细看一下比较的地方和变量，是对“$KEY”进行比较的，我们重新序列化。发现其实是个空字符。\n\n所有如果我们在cookie中添加一条这个记录就可以显示flag，使用Firefox浏览器，安装cookie manager这个插件，该插件能够帮助我们手动添加cookie，添加后如下图。\n\n然后再次打开连接就会看到flag\n\n参考连接https://chybeta.github.io/2017/06/17/%E6%B5%85%E8%B0%88php%E5%8F%8D%E5%BA%8F%E5%88%97%E5%8C%96%E6%BC%8F%E6%B4%9E/\nhttps://www.freebuf.com/articles/web/167721.html\nhttps://www.cnblogs.com/lishiyun19/p/4470086.html\n总结php反序列化漏洞在CTF题中经常见到，这道题考查相对单一，大家可以找找其他相关的题目，继续加深下印象。\n","dateCreated":"2018-11-08T11:03:57+08:00","dateModified":"2018-11-09T14:35:32+08:00","datePublished":"2018-11-08T11:03:57+08:00","description":"一道简单的web题，由蓝鲸安全平台提供\n题目：为什么后台无法登录了？好像增加了cookie也不能登录，答题地址：http://ctf.whaledu.com:10802/23h72gdsi8/","headline":"PHP反序列化漏洞","image":["https://ws2.sinaimg.cn/large/0069RVTdly1fv9d6x9yhjj30o60iqau7.jpg","https://ws3.sinaimg.cn/large/0069RVTdly1fv9d1artqxj31kw1z4kjp.jpg"],"mainEntityOfPage":{"@type":"WebPage","@id":"http://yoursite.com/2018/11/08/PHP反序列化漏洞/"},"publisher":{"@type":"Organization","name":"Yuan Shen","sameAs":[],"image":"yuan.jpg","logo":{"@type":"ImageObject","url":"yuan.jpg"}},"url":"http://yoursite.com/2018/11/08/PHP反序列化漏洞/","keywords":"Web, php","thumbnailUrl":"https://ws2.sinaimg.cn/large/0069RVTdly1fv9d6x9yhjj30o60iqau7.jpg"}</script>
+    <meta name="description" content="一道简单的web题，由蓝鲸安全平台提供 题目：为什么后台无法登录了？好像增加了cookie也不能登录，答题地址：http://ctf.whaledu.com:10802/23h72gdsi8/">
+<meta name="keywords" content="Web,php">
+<meta property="og:type" content="blog">
+<meta property="og:title" content="PHP反序列化漏洞">
+<meta property="og:url" content="http://yoursite.com/2018/11/08/PHP反序列化漏洞/index.html">
+<meta property="og:site_name" content="Ant Park">
+<meta property="og:description" content="一道简单的web题，由蓝鲸安全平台提供 题目：为什么后台无法登录了？好像增加了cookie也不能登录，答题地址：http://ctf.whaledu.com:10802/23h72gdsi8/">
+<meta property="og:locale" content="zh-cn">
+<meta property="og:image" content="https://ws2.sinaimg.cn/large/006tNbRwly1fx1rw8wmb9j30k60bkdmh.jpg">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/006tNbRwly1fx1rybuwqjj30gu0a6n3q.jpg">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/006tNbRwly1fx1s5m6d02j31kw09i0ur.jpg">
+<meta property="og:image" content="https://ws4.sinaimg.cn/large/006tNbRwly1fx1s79b9uij30mq06qmxt.jpg">
+<meta property="og:updated_time" content="2018-11-09T06:35:32.978Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="PHP反序列化漏洞">
+<meta name="twitter:description" content="一道简单的web题，由蓝鲸安全平台提供 题目：为什么后台无法登录了？好像增加了cookie也不能登录，答题地址：http://ctf.whaledu.com:10802/23h72gdsi8/">
+<meta name="twitter:image" content="https://ws2.sinaimg.cn/large/006tNbRwly1fx1rw8wmb9j30k60bkdmh.jpg">
+    
+    
+        
+    
+    
+        <meta property="og:image" content="http://yoursite.com/assets/images/yuan.jpg"/>
+    
+    
+        <meta property="og:image" content="https://ws2.sinaimg.cn/large/0069RVTdly1fv9d6x9yhjj30o60iqau7.jpg"/>
+        <meta class="swiftype" name="image" data-type="enum" content="https://ws2.sinaimg.cn/large/0069RVTdly1fv9d6x9yhjj30o60iqau7.jpg" />
+    
+    
+        <meta property="og:image" content="https://ws3.sinaimg.cn/large/0069RVTdly1fv9d1artqxj31kw1z4kjp.jpg"/>
+        <meta class="swiftype" name="image" data-type="enum" content="https://ws3.sinaimg.cn/large/0069RVTdly1fv9d1artqxj31kw1z4kjp.jpg" />
+    
+    
+    <!--STYLES-->
+    <link rel="stylesheet" href="/assets/css/style-du2xmrqdqrl2ollgeiw050kpl6l4nbyz7bumjuurjgsxyopifvukebxc9lqe.min.css">
+    <!--STYLES END-->
+    
+
+    
+</head>
+
+    <body>
+        <div id="blog">
+            <!-- Define author's picture -->
+
+
+    
+        
+            
+        
+    
+
+<header id="header" data-behavior="4">
+    <i id="btn-open-sidebar" class="fa fa-lg fa-bars"></i>
+    <div class="header-title">
+        <a class="header-title-link" href="/ ">Ant Park</a>
+    </div>
+    
+        
+            <a  class="header-right-picture "
+                href="#about">
+        
+        
+            <img class="header-picture" src="/assets/images/yuan.jpg" alt="作者的图片"/>
+        
+        </a>
+    
+</header>
+
+            <!-- Define author's picture -->
+
+
+
+        
+    
+
+<nav id="sidebar" data-behavior="4">
+    <div class="sidebar-container">
+        
+            <div class="sidebar-profile">
+                <a href="/#about">
+                    <img class="sidebar-profile-picture" src="/assets/images/yuan.jpg" alt="作者的图片"/>
+                </a>
+                <h4 class="sidebar-profile-name">Yuan Shen</h4>
+                
+                    <h5 class="sidebar-profile-bio"><p>author.bio</p>
+</h5>
+                
+            </div>
+        
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/ "
+                            
+                            title="首页"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-home" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">首页</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-categories"
+                            
+                            title="分类"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-bookmark" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">分类</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-tags"
+                            
+                            title="标签"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-tags" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">标签</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-archives"
+                            
+                            title="归档"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-archive" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">归档</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+    </div>
+</nav>
+
+            
+        <div class="post-header-cover
+                    text-center
+                    post-header-cover--full"
+             style="background-image:url('https://ws3.sinaimg.cn/large/0069RVTdly1fv9d1artqxj31kw1z4kjp.jpg');"
+             data-behavior="4">
+            
+        </div>
+
+            <div id="main" data-behavior="4"
+                 class="hasCover
+                        hasCoverMetaOut
+                        hasCoverCaption">
+                
+<article class="post">
+    
+        <span class="post-header-cover-caption caption">Lonely</span>
+    
+    
+        <div class="post-header main-content-wrap text-center">
+    
+        <h1 class="post-title">
+            PHP反序列化漏洞
+        </h1>
+    
+    
+</div>
+
+    
+    <div class="post-content markdown">
+        <div class="main-content-wrap">
+            <p>一道简单的web题，由蓝鲸安全平台提供</p>
+<p>题目：为什么后台无法登录了？好像增加了cookie也不能登录，答题地址：<a href="http://ctf.whaledu.com:10802/23h72gdsi8/" target="_blank" rel="noopener">http://ctf.whaledu.com:10802/23h72gdsi8/</a></p>
+<a id="more"></a>
+<h1 id="table-of-contents">目录</h1><ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#背景知识"><span class="toc-text">背景知识</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#什么是PHP序列化（serialize）与反序列化（unserialize）"><span class="toc-text">什么是PHP序列化（serialize）与反序列化（unserialize）</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#PHP反序列化漏洞"><span class="toc-text">PHP反序列化漏洞</span></a><ol class="toc-child"><li class="toc-item toc-level-4"><a class="toc-link" href="#Magic-Function"><span class="toc-text">Magic Function</span></a></li></ol></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#题目解析"><span class="toc-text">题目解析</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#参考连接"><span class="toc-text">参考连接</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#总结"><span class="toc-text">总结</span></a></li></ol>
+<h2 id="背景知识"><a href="#背景知识" class="headerlink" title="背景知识"></a>背景知识</h2><p>PHP反序列化漏洞虽然利用的条件比较苛刻，但是如果可以利用一般都会产生很严重的后果，而且该知识点在CTF考题中屡考不鲜，它相对weblogic等java项目的反序列化漏洞利用起来相对简单，更加灵活。<strong>通常来说，PHP反序列化就是一种针对php对象的注入漏洞。</strong></p>
+<h3 id="什么是PHP序列化（serialize）与反序列化（unserialize）"><a href="#什么是PHP序列化（serialize）与反序列化（unserialize）" class="headerlink" title="什么是PHP序列化（serialize）与反序列化（unserialize）"></a>什么是PHP序列化（serialize）与反序列化（unserialize）</h3><p>一个对象在某个php中可以调用，但是它不能穿越“时空”的限制跑到另一个网站或者页面中去使用。为了解决这个问题，于是就为php对象构建了一种“时光机”，也就是序列化：serialize，它可以将任意对象转变为一个静态的字符串，因此，对象就可以作为一个简单的变量出入任何需要它的php中了。</p>
+<p><strong>反序列化</strong>就是一个php序列化时光机的接收器，通过它可以将静态序列还原为原本对象的样子。</p>
+<p><strong>举个栗子：</strong>我们用一下代码来序列化几个对象（字符串，数字，一个只有变量的类和一个有函数的类）。</p>
+<figure class="highlight php"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">&lt;?php</span></span><br><span class="line">$str = <span class="string">"hello,world!"</span>;</span><br><span class="line">$arr = <span class="keyword">array</span>(<span class="string">"name"</span>=&gt;<span class="string">"hello"</span>, <span class="string">"id"</span>=&gt;<span class="number">1</span>);</span><br><span class="line"><span class="class"><span class="keyword">class</span> <span class="title">A</span></span>&#123;</span><br><span class="line">    <span class="keyword">public</span> $a = <span class="number">123</span>;</span><br><span class="line">&#125;</span><br><span class="line"><span class="class"><span class="keyword">class</span> <span class="title">B</span></span>&#123;</span><br><span class="line">    <span class="keyword">public</span> $b = <span class="number">123</span>;</span><br><span class="line">    <span class="keyword">public</span> <span class="function"><span class="keyword">function</span> <span class="title">world</span><span class="params">()</span></span>&#123;</span><br><span class="line">        $b = <span class="number">111</span>;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line">$a = <span class="keyword">new</span> A();</span><br><span class="line">$b = <span class="keyword">new</span> B();</span><br><span class="line"><span class="keyword">echo</span> <span class="string">'str- '</span>.serialize($str);</span><br><span class="line"><span class="keyword">echo</span> <span class="string">"&lt;/br&gt;"</span>;</span><br><span class="line"><span class="keyword">echo</span> <span class="string">'arr- '</span>.serialize($arr);</span><br><span class="line"><span class="keyword">echo</span> <span class="string">"&lt;/br&gt;"</span>;</span><br><span class="line"><span class="keyword">echo</span> <span class="string">'classA- '</span>.serialize($a);</span><br><span class="line"><span class="keyword">echo</span> <span class="string">"&lt;/br&gt;"</span>;</span><br><span class="line"><span class="keyword">echo</span> <span class="string">'classB- '</span>.serialize($b);</span><br><span class="line"><span class="meta">?&gt;</span></span><br></pre></td></tr></table></figure>
+<p>运行结果：序列化后的格式如下</p>
+<figure class="highlight php"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">str- s:<span class="number">12</span>:<span class="string">"hello,world!"</span>;</span><br><span class="line">arr- a:<span class="number">2</span>:&#123;s:<span class="number">4</span>:<span class="string">"name"</span>;s:<span class="number">5</span>:<span class="string">"hello"</span>;s:<span class="number">2</span>:<span class="string">"id"</span>;i:<span class="number">1</span>;&#125;</span><br><span class="line">classA- O:<span class="number">1</span>:<span class="string">"A"</span>:<span class="number">1</span>:&#123;s:<span class="number">1</span>:<span class="string">"a"</span>;i:<span class="number">123</span>;&#125;</span><br><span class="line">classB- O:<span class="number">1</span>:<span class="string">"B"</span>:<span class="number">1</span>:&#123;s:<span class="number">1</span>:<span class="string">"b"</span>;i:<span class="number">123</span>;&#125;</span><br></pre></td></tr></table></figure>
+<p>1、首先按照序列对象的包含结构层层递进（树状结构），如果是一个数组，先列出数组和其中元素，并对其中的元素一一枚举。</p>
+<p>2、每个子对象包含三个特征：<strong>类型（s:string, a:array, O:class(object)….）、长度、值。</strong></p>
+<p>3、类的序列化只会保存所有变量，但是不会保存对象的方法（函数），所有可以看到A和B的序列化没有区别。</p>
+<p>这里以第三行classA为例进行讲解：<code>O</code>代表存储的是对象（object），如果给serialize()传入的是一个数组为<code>a</code>，传入字符为<code>s</code>；<code>1</code>表示对象的名称有1个字符。<code>“A”</code>表示对象的名称。<code>1</code>表示有一个值。<code>{s:1:&quot;a&quot;;i:123;}</code>中，<code>s</code>表示字符串，<code>1</code>表示该字符串的长度，<code>“a”</code>为字符串的名称，之后的类似。</p>
+<h3 id="PHP反序列化漏洞"><a href="#PHP反序列化漏洞" class="headerlink" title="PHP反序列化漏洞"></a>PHP反序列化漏洞</h3><p>反序列化的根源在于unserialize()函数的参数是可控的，我们可以通过传入一个精心构造的序列化字符串，从而控制对象内部的变量甚至是函数。如果</p>
+<h4 id="Magic-Function"><a href="#Magic-Function" class="headerlink" title="Magic Function"></a>Magic Function</h4><p>php中有一类特殊的方法叫<code>Magic function</code>， 这里我们着重关注一下几个：</p>
+<ul>
+<li>构造函数__construct()：当对象创建(new)时会自动调用。但在unserialize()时是不会自动调用的。</li>
+<li>析构函数__destruct()：当对象被销毁时会自动调用。</li>
+<li>__wakeup() ：如前所提，unserialize()时会自动调用</li>
+</ul>
+<figure class="highlight php"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">&lt;?php</span></span><br><span class="line"><span class="class"><span class="keyword">class</span> <span class="title">chybeta</span></span>&#123;</span><br><span class="line">	<span class="keyword">var</span> $test = <span class="string">'123'</span>;</span><br><span class="line">	<span class="function"><span class="keyword">function</span> <span class="title">__wakeup</span><span class="params">()</span></span>&#123;</span><br><span class="line">		<span class="keyword">echo</span> <span class="string">"__wakeup"</span>;</span><br><span class="line">		<span class="keyword">echo</span> <span class="string">"&lt;/br&gt;"</span>;</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="function"><span class="keyword">function</span> <span class="title">__construct</span><span class="params">()</span></span>&#123;</span><br><span class="line">		<span class="keyword">echo</span> <span class="string">"__construct"</span>;</span><br><span class="line">		<span class="keyword">echo</span> <span class="string">"&lt;/br&gt;"</span>;</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="function"><span class="keyword">function</span> <span class="title">__destruct</span><span class="params">()</span></span>&#123;</span><br><span class="line">		<span class="keyword">echo</span> <span class="string">"__destruct"</span>;</span><br><span class="line">		<span class="keyword">echo</span> <span class="string">"&lt;/br&gt;"</span>;</span><br><span class="line">	&#125;</span><br><span class="line">&#125;</span><br><span class="line">$class2 = <span class="string">'O:7:"chybeta":1:&#123;s:4:"test";s:3:"123";&#125;'</span>;</span><br><span class="line">	print_r($class2);</span><br><span class="line"><span class="keyword">echo</span> <span class="string">"&lt;/br&gt;"</span>;</span><br><span class="line">$class2_unser = unserialize($class2);</span><br><span class="line">print_r($class2_unser);</span><br><span class="line"><span class="keyword">echo</span> <span class="string">"&lt;/br&gt;"</span>;</span><br><span class="line"><span class="meta">?&gt;</span></span><br></pre></td></tr></table></figure>
+<p>运行结果：</p>
+<figure class="highlight php"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">O:<span class="number">7</span>:<span class="string">"chybeta"</span>:<span class="number">1</span>:&#123;s:<span class="number">4</span>:<span class="string">"test"</span>;s:<span class="number">3</span>:<span class="string">"123"</span>;&#125;</span><br><span class="line">__wakeup</span><br><span class="line">chybeta Object ( [test] =&gt; <span class="number">123</span> ) </span><br><span class="line">__destruct</span><br></pre></td></tr></table></figure>
+<h2 id="题目解析"><a href="#题目解析" class="headerlink" title="题目解析"></a>题目解析</h2><p>访问解题网站，发现是个登录窗口，可是在输入信息之后点击login没有任何反应。查看源码，发现了是个假的表单，然后有一个提示参数hint。</p>
+<figure class="highlight html"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line"><span class="tag">&lt;<span class="name">html</span>&gt;</span></span><br><span class="line"><span class="tag">&lt;<span class="name">head</span>&gt;</span></span><br><span class="line"><span class="tag">&lt;<span class="name">meta</span> <span class="attr">http-equiv</span>=<span class="string">"Content-Type"</span> <span class="attr">content</span>=<span class="string">"text/html; charset=UTF-8"</span>&gt;</span></span><br><span class="line"><span class="tag">&lt;<span class="name">title</span>&gt;</span>Login<span class="tag">&lt;/<span class="name">title</span>&gt;</span></span><br><span class="line"><span class="tag">&lt;<span class="name">link</span> <span class="attr">rel</span>=<span class="string">"stylesheet"</span> <span class="attr">href</span>=<span class="string">"admin.css"</span> <span class="attr">type</span>=<span class="string">"text/css"</span>&gt;</span></span><br><span class="line"><span class="tag">&lt;/<span class="name">head</span>&gt;</span></span><br><span class="line"><span class="tag">&lt;<span class="name">body</span>&gt;</span></span><br><span class="line"><span class="tag">&lt;<span class="name">br</span>&gt;</span></span><br><span class="line"><span class="tag">&lt;<span class="name">div</span> <span class="attr">class</span>=<span class="string">"container"</span> <span class="attr">align</span>=<span class="string">"center"</span>&gt;</span></span><br><span class="line">  <span class="tag">&lt;<span class="name">form</span> <span class="attr">method</span>=<span class="string">"POST"</span> <span class="attr">action</span>=<span class="string">"#"</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">p</span>&gt;</span><span class="tag">&lt;<span class="name">input</span> <span class="attr">name</span>=<span class="string">"user"</span> <span class="attr">type</span>=<span class="string">"text"</span> <span class="attr">placeholder</span>=<span class="string">"Username"</span>&gt;</span><span class="tag">&lt;/<span class="name">p</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">p</span>&gt;</span><span class="tag">&lt;<span class="name">input</span> <span class="attr">name</span>=<span class="string">"password"</span> <span class="attr">type</span>=<span class="string">"password"</span> <span class="attr">placeholder</span>=<span class="string">"Password"</span>&gt;</span><span class="tag">&lt;/<span class="name">p</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">p</span>&gt;</span><span class="tag">&lt;<span class="name">input</span> <span class="attr">value</span>=<span class="string">"Login"</span> <span class="attr">type</span>=<span class="string">"button"</span>/&gt;</span><span class="tag">&lt;/<span class="name">p</span>&gt;</span></span><br><span class="line">  <span class="tag">&lt;/<span class="name">form</span>&gt;</span></span><br><span class="line"><span class="comment">&lt;!--hint:paramenter:hint--&gt;</span></span><br><span class="line"><span class="tag">&lt;/<span class="name">div</span>&gt;</span></span><br><span class="line"><span class="tag">&lt;/<span class="name">body</span>&gt;</span></span><br><span class="line"><span class="tag">&lt;/<span class="name">html</span>&gt;</span></span><br></pre></td></tr></table></figure>
+<p>尝试<strong>get、post、cookie</strong>参数，在get参数中提交hint=1得到源码</p>
+<figure class="highlight php"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">&lt;?php</span> </span><br><span class="line">error_reporting(<span class="number">0</span>); </span><br><span class="line"></span><br><span class="line"><span class="keyword">include_once</span>(<span class="string">"flag.php"</span>); </span><br><span class="line"></span><br><span class="line">$cookie = $_COOKIE[<span class="string">'Whale'</span>]; </span><br><span class="line"></span><br><span class="line"><span class="keyword">if</span>(<span class="keyword">isset</span>($_GET[<span class="string">'hint'</span>]))&#123; </span><br><span class="line">    show_source(<span class="keyword">__FILE__</span>); </span><br><span class="line">&#125; </span><br><span class="line"><span class="keyword">elseif</span> (unserialize($cookie) === <span class="string">"$KEY"</span>) </span><br><span class="line">&#123;    </span><br><span class="line">    <span class="keyword">echo</span> <span class="string">"$flag"</span>; </span><br><span class="line">&#125; </span><br><span class="line"><span class="keyword">else</span> &#123; </span><br><span class="line"><span class="meta">?&gt;</span> </span><br><span class="line">    </span><br><span class="line"><span class="meta">&lt;?php</span> </span><br><span class="line">&#125; </span><br><span class="line">$KEY=<span class="string">'Whale:www.whalectf.com'</span>; </span><br><span class="line"><span class="meta">?&gt;</span></span><br></pre></td></tr></table></figure>
+<p>找到重要代码段，有<strong>unserialize</strong>函数，考察反序列化。需要提交一个<strong>cookie</strong>反序列化后和<strong>“$KEY”</strong>相等。</p>
+<p>我们还看到最下方的$KEY变量定义，只需要复制所有源码，然后利用serialize序列化一下就好。先看一下直接对KEY的序列化</p>
+<p><img src="https://ws2.sinaimg.cn/large/006tNbRwly1fx1rw8wmb9j30k60bkdmh.jpg" alt=""></p>
+<p>但是递交并不正确，所有仔细看一下比较的地方和变量，是对“$KEY”进行比较的，我们重新序列化。发现其实是个空字符。</p>
+<p><img src="https://ws1.sinaimg.cn/large/006tNbRwly1fx1rybuwqjj30gu0a6n3q.jpg" alt=""></p>
+<p>所有如果我们在cookie中添加一条这个记录就可以显示flag，使用Firefox浏览器，安装cookie manager这个插件，该插件能够帮助我们手动添加cookie，添加后如下图。</p>
+<p><img src="https://ws1.sinaimg.cn/large/006tNbRwly1fx1s5m6d02j31kw09i0ur.jpg" alt=""></p>
+<p>然后再次打开连接就会看到flag</p>
+<p><img src="https://ws4.sinaimg.cn/large/006tNbRwly1fx1s79b9uij30mq06qmxt.jpg" alt=""></p>
+<h2 id="参考连接"><a href="#参考连接" class="headerlink" title="参考连接"></a>参考连接</h2><p><a href="https://chybeta.github.io/2017/06/17/%E6%B5%85%E8%B0%88php%E5%8F%8D%E5%BA%8F%E5%88%97%E5%8C%96%E6%BC%8F%E6%B4%9E/" target="_blank" rel="noopener">https://chybeta.github.io/2017/06/17/%E6%B5%85%E8%B0%88php%E5%8F%8D%E5%BA%8F%E5%88%97%E5%8C%96%E6%BC%8F%E6%B4%9E/</a></p>
+<p><a href="https://www.freebuf.com/articles/web/167721.html" target="_blank" rel="noopener">https://www.freebuf.com/articles/web/167721.html</a></p>
+<p><a href="https://www.cnblogs.com/lishiyun19/p/4470086.html" target="_blank" rel="noopener">https://www.cnblogs.com/lishiyun19/p/4470086.html</a></p>
+<h2 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h2><p>php反序列化漏洞在CTF题中经常见到，这道题考查相对单一，大家可以找找其他相关的题目，继续加深下印象。</p>
+
+            
+
+        </div>
+    </div>
+    <div id="post-footer" class="post-footer main-content-wrap">
+        
+            <div class="post-footer-tags">
+                <span class="text-color-light text-small">标签</span><br/>
+                
+    <a class="tag tag--primary tag--small t-link" href="/tags/Web/">Web</a> <a class="tag tag--primary tag--small t-link" href="/tags/php/">php</a>
+
+            </div>
+        
+        
+        
+    </div>
+</article>
+
+
+
+                <footer id="footer" class="main-content-wrap">
+    <span class="copyrights">
+        Copyrights &copy; 2018 Yuan Shen. All Rights Reserved.
+    </span>
+</footer>
+
+            </div>
+            
+        </div>
+        
+
+
+    
+        
+    
+
+<div id="about">
+    <div id="about-card">
+        <div id="about-btn-close">
+            <i class="fa fa-times"></i>
+        </div>
+        
+            <img id="about-card-picture" src="/assets/images/yuan.jpg" alt="作者的图片"/>
+        
+            <h4 id="about-card-name">Yuan Shen</h4>
+        
+            <div id="about-card-bio"><p>author.bio</p>
+</div>
+        
+        
+            <div id="about-card-job">
+                <i class="fa fa-briefcase"></i>
+                <br/>
+                <p>author.job</p>
+
+            </div>
+        
+        
+    </div>
+</div>
+
+        
+        
+<div id="cover" style="background-image:url('/assets/images/cover.jpg');"></div>
+        <!--SCRIPTS-->
+<script src="/assets/js/script-vufjrm3fmbuttogo1hxuu0w9w0sesk5iyysjuguc2hdhufot9szxg8twijry.min.js"></script>
+<!--SCRIPTS END-->
+
+
+
+    </body>
+</html>
