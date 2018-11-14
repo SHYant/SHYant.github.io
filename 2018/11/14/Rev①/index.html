@@ -1,0 +1,379 @@
+
+<!DOCTYPE html>
+<html lang="zh-cn">
+    
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="generator" content="Ant Park">
+    <title>Rev① - Ant Park</title>
+    <meta name="author" content="Yuan Shen">
+    
+    
+        <link rel="icon" href="http://yoursite.com/assets/images/yuan.png">
+    
+    
+    <script type="application/ld+json">{"@context":"http://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Yuan Shen","sameAs":[],"image":"yuan.jpg"},"articleBody":"一道简单的Reverse题，由蓝鲸安全平台提供\n题目：入门语言，地址：https://pan.baidu.com/s/1NfDsl9B7LoUeAwI5m66Hjg\n知识点：IDA分析，NOP指令，gdb调试\n\n\n背景知识GDB概述\nGDB是linux中的动静态分析调试工具，功能非常强大，不但可以静态分析程序代码；如果生成程序的时候带有调试信息，还能够看到相当于反汇编的源代码。\n同时GDB还是linux程序动态调试的绝佳工具。虽然是命令行程序相对比windows中的程序没有那么方便，但是使用起来非常灵活。我们可以下断点或者逐句调试。也可以设置寄存器或者汇编指令等。\nGDB作为命令行的调试工具，它的指令就比较重要了：首先启动gdb调试某个程序使用gdb \\ 启动。\n\nGDB常用命令运行\nrun（简写r）：其作用是运行程序，当遇到断点后，程序会在断点处停止运行，等待用户输入下一步的命令；\ncontinue（简写c）：继续执行，到下一个断点处（或运行结束）\nnext（简写n）：单步跟踪程序，当遇到函数调用，也不进入函数体；此命令同step的主要区别是，step遇到用户自定义的函数，将步入到函数中去运行，而next则直接调用函数，不会进入到函数体内。\nstep（简写s）：单步调试如果有函数调用，则进入函数；与命令n不同。\nuntil：当在调试时厌倦了在一个循环体内单步跟踪时，这个命令可以运行程序直到退出循环体。\nuntil+行号：运行至某行，不仅仅用来跳出循环。\nfinish：运行程序，直到当函数完成返回，并打印函数返回时的堆栈地址和返回值及参数值等信息。\ncall函数（参数）：调用程序中可见的函数，并传递“参数”，如：call gdb_test(33)\nquit（简写q）：退出qdb\n\n设置断点\nbreak n（简写b n）：在第n行处设置断点\nb fn1 if a&gt;b ：条件断点设置\nbreak func ：在函数func（）的入口处设置断点，如：break main\ndelete 断点号n：删除第n个断点\ndisable断点号n：暂停第n个断点\nenable断点号n：开启第n个断点\nclear行号n：清除第n行的断点\ninfo b：显示当前程序的断点设置情况\ndelete breakpoints：清除所有断点\n\n查看源代码\nlist 行号：将显示当前文件以“行号”为中心的前后10行代码\nlist函数名：将显示“函数名”所在函数的源代码\n\n打印表达式\nprint表达式（简写p）：其中“表达式”可以是任何当前正在被测试程序的有效表达式，假如当前正在调试C语言的程序，那么“表达式”可以是任何C语言的有效表达式，包括数字，变量甚至是函数调用。\nprint a：将显示整数a的值\nprint name：将显示字符串name的值\nprint gdb_test(22)：将以整数22作为参数调用gdb_test()函数\nprint gdb_test(a)：将以变量a作为参数调用gdb_test()函数\ndisplay 表达式：在单步调试非常有用，使用该命令设置一个表达式后，他将在每次单步进行指令后，紧接着输出被设置的表达式及其值。\nwatch 表达式：设置一个监视点，一旦被监视的“表达式“的值改变，gdb将强行终止正在被调试的程序。\nwhatis：查询变量或函数\ninfo function：查询函数\ninfo locals：显示当前堆栈页的所有变量\n\n查询运行信息\nwhere/bt：当前运行的堆栈列表\nbt backtrace：显示当前调用堆栈\nup/down：改变堆栈显示的深度\nset args参数：指定运行时的参数\nshow args：查看设置好的参数\ninfo program：来查看程序的是否在运行，进程号，被暂停的原因\n\n分割窗口\nlayout：用于分割窗口，可以一边查看代码，一边测试\nlayout src：显示源代码窗口\nlayout asm：显示反汇编窗口\nlayout regs：显示源代码/反汇编和CPU寄存器窗口\nlayout split：显示源代码和反汇编的窗口\nCtrl+L：刷新窗口\n\n题目解析 拿到程序，首先使用file命令，分析程序结构，该程序是64位的ELF可执行程序，尝试执行，逻辑是输入密码后进行检查，经典的验证式CTF题目：\n\n接下来使用64位的IDA分析一下程序，找到main函数：\n\n定位到关键函数sub_4006FD，发现是个算法校验，可以直接写脚本解题\n\n脚本如下：密码  Code_Talkers\n1234567891011121314import numpy as npv3 = list(\"DufhbmfpG`imosewUglpt\")print v3v4 = []for i in v3:\tv4.append(ord(i))print v4v4 = np.array(v4).reshape(3,7)a = ''for i in range(12):\tprint chr(v4[i % 3][2 * (i / 3)])\ta += chr(v4[i % 3][2 * (i / 3)] -1)print a\n另一种方法通过使用gdb尝试动态调试进行解题：\n启动Gdb启动程序，执行start命令\n\n程序阻塞了，我们用ctrl+z终止执行，看到停止的命令地址为：0x00000000004007e4\n\n返回IDA查看到底什么地方阻止程序的运行，在ida中使用快捷键g，输入刚才的内存地址\n\n发现是因为跳转到了一个子程序中loc_4007e4中。F5反汇编，看到了while 1的循环，原来根源在此\n\n返回到gdb中，我们使用两个0x90(nop)将跳转终止\n命令：set *(byte)*0x4007e4=0x90 set *(byte)*0x4007e5=0x90\n接着程序可以重新开始运行了，我们需要重新检查程序检验密码的地方，找到寄存器存放我们输入的值，并且离最后判断处最近一处设为断点。\n\n找到最终判断在40078B的位置，而检验是通过eax和edx的差是否为1进行判断的，所以讲断点下到eax赋值的位置。\n使用命令b *0x400784\n\n紧接着利用c执行到断点（两次执行，碰到主函数会有中断）\n\n我们输入密码后运行到判断断点：\n\n使用print(p) \\$edx和print(p) \\$eax检查两个寄存器的值\n\n可以看到eax为我们自己输入A的ascii码，那么对比的edx应该就是需要的密码对照值了，为了让程序继续，使用set命令讲eax设置为比edx小1的数（最后使用十进制）\n\n最后依次循环，直到输出nice的判断结果为止，收集到所有的edx的值，发现在可打印字符中。对应输出：\n\n总结：这道题属于逆向中最简单的一种类型，这题主要是练习一下gdb的使用方法，总结了gdb常用命令，以后逐渐熟悉gdb调试器。\n","dateCreated":"2018-11-14T21:30:19+08:00","dateModified":"2018-11-15T00:13:06+08:00","datePublished":"2018-11-14T21:30:19+08:00","description":"一道简单的Reverse题，由蓝鲸安全平台提供\n题目：入门语言，地址：https://pan.baidu.com/s/1NfDsl9B7LoUeAwI5m66Hjg\n知识点：IDA分析，NOP指令，gdb调试","headline":"Rev①","image":["https://ws2.sinaimg.cn/large/0069RVTdly1fv9d6x9yhjj30o60iqau7.jpg","https://ws3.sinaimg.cn/large/0069RVTdly1fv9d1artqxj31kw1z4kjp.jpg"],"mainEntityOfPage":{"@type":"WebPage","@id":"http://yoursite.com/2018/11/14/Rev①/"},"publisher":{"@type":"Organization","name":"Yuan Shen","sameAs":[],"image":"yuan.jpg","logo":{"@type":"ImageObject","url":"yuan.jpg"}},"url":"http://yoursite.com/2018/11/14/Rev①/","keywords":"reverse, gdb","thumbnailUrl":"https://ws2.sinaimg.cn/large/0069RVTdly1fv9d6x9yhjj30o60iqau7.jpg"}</script>
+    <meta name="description" content="一道简单的Reverse题，由蓝鲸安全平台提供 题目：入门语言，地址：https://pan.baidu.com/s/1NfDsl9B7LoUeAwI5m66Hjg 知识点：IDA分析，NOP指令，gdb调试">
+<meta name="keywords" content="reverse,gdb">
+<meta property="og:type" content="blog">
+<meta property="og:title" content="Rev①">
+<meta property="og:url" content="http://yoursite.com/2018/11/14/Rev①/index.html">
+<meta property="og:site_name" content="Ant Park">
+<meta property="og:description" content="一道简单的Reverse题，由蓝鲸安全平台提供 题目：入门语言，地址：https://pan.baidu.com/s/1NfDsl9B7LoUeAwI5m66Hjg 知识点：IDA分析，NOP指令，gdb调试">
+<meta property="og:locale" content="zh-cn">
+<meta property="og:image" content="https://ws4.sinaimg.cn/large/006tNbRwly1fx7yw1zxrnj318a05odh3.jpg">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/006tNbRwly1fx7z9ys1s6j30mm0cyabv.jpg">
+<meta property="og:image" content="https://ws3.sinaimg.cn/large/006tNbRwly1fx7zb8gv3ej30kw09g3zw.jpg">
+<meta property="og:image" content="https://ws2.sinaimg.cn/large/006tNbRwly1fx7zsijns1j30l4050gqf.jpg">
+<meta property="og:image" content="https://ws4.sinaimg.cn/large/006tNbRwly1fx7zu4kwzlj312i0bcgng.jpg">
+<meta property="og:image" content="https://ws2.sinaimg.cn/large/006tNbRwly1fx7zw7zht6j30z4062dhf.jpg">
+<meta property="og:image" content="https://ws2.sinaimg.cn/large/006tNbRwly1fx7zyi825dj30ew0a4gme.jpg">
+<meta property="og:image" content="https://ws3.sinaimg.cn/large/006tNbRwly1fx80klfv4fj30ok0jugql.jpg">
+<meta property="og:image" content="https://ws2.sinaimg.cn/large/006tNbRwly1fx80ovsd6mj30j408475a.jpg">
+<meta property="og:image" content="https://ws3.sinaimg.cn/large/006tNbRwly1fx814hdk49j30gi04ctbc.jpg">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/006tNbRwly1fx8157ls83j30ca03i76s.jpg">
+<meta property="og:image" content="https://ws2.sinaimg.cn/large/006tNbRwly1fx816wbq91j30cg052dis.jpg">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/006tNbRwly1fx819a5nibj30ae046wfy.jpg">
+<meta property="og:image" content="https://ws4.sinaimg.cn/large/006tNbRwly1fx81kr01l8j30cy02qwep.jpg">
+<meta property="og:updated_time" content="2018-11-14T16:13:06.721Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Rev①">
+<meta name="twitter:description" content="一道简单的Reverse题，由蓝鲸安全平台提供 题目：入门语言，地址：https://pan.baidu.com/s/1NfDsl9B7LoUeAwI5m66Hjg 知识点：IDA分析，NOP指令，gdb调试">
+<meta name="twitter:image" content="https://ws4.sinaimg.cn/large/006tNbRwly1fx7yw1zxrnj318a05odh3.jpg">
+    
+    
+        
+    
+    
+        <meta property="og:image" content="http://yoursite.com/assets/images/yuan.jpg"/>
+    
+    
+        <meta property="og:image" content="https://ws2.sinaimg.cn/large/0069RVTdly1fv9d6x9yhjj30o60iqau7.jpg"/>
+        <meta class="swiftype" name="image" data-type="enum" content="https://ws2.sinaimg.cn/large/0069RVTdly1fv9d6x9yhjj30o60iqau7.jpg" />
+    
+    
+        <meta property="og:image" content="https://ws3.sinaimg.cn/large/0069RVTdly1fv9d1artqxj31kw1z4kjp.jpg"/>
+        <meta class="swiftype" name="image" data-type="enum" content="https://ws3.sinaimg.cn/large/0069RVTdly1fv9d1artqxj31kw1z4kjp.jpg" />
+    
+    
+    <!--STYLES-->
+    <link rel="stylesheet" href="/assets/css/style-du2xmrqdqrl2ollgeiw050kpl6l4nbyz7bumjuurjgsxyopifvukebxc9lqe.min.css">
+    <!--STYLES END-->
+    
+
+    
+</head>
+
+    <body>
+        <div id="blog">
+            <!-- Define author's picture -->
+
+
+    
+        
+            
+        
+    
+
+<header id="header" data-behavior="4">
+    <i id="btn-open-sidebar" class="fa fa-lg fa-bars"></i>
+    <div class="header-title">
+        <a class="header-title-link" href="/ ">Ant Park</a>
+    </div>
+    
+        
+            <a  class="header-right-picture "
+                href="#about">
+        
+        
+            <img class="header-picture" src="/assets/images/yuan.jpg" alt="作者的图片"/>
+        
+        </a>
+    
+</header>
+
+            <!-- Define author's picture -->
+
+
+
+        
+    
+
+<nav id="sidebar" data-behavior="4">
+    <div class="sidebar-container">
+        
+            <div class="sidebar-profile">
+                <a href="/#about">
+                    <img class="sidebar-profile-picture" src="/assets/images/yuan.jpg" alt="作者的图片"/>
+                </a>
+                <h4 class="sidebar-profile-name">Yuan Shen</h4>
+                
+                    <h5 class="sidebar-profile-bio"><p>author.bio</p>
+</h5>
+                
+            </div>
+        
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/ "
+                            
+                            title="首页"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-home" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">首页</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-categories"
+                            
+                            title="分类"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-bookmark" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">分类</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-tags"
+                            
+                            title="标签"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-tags" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">标签</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-archives"
+                            
+                            title="归档"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-archive" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">归档</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+    </div>
+</nav>
+
+            
+        <div class="post-header-cover
+                    text-center
+                    post-header-cover--full"
+             style="background-image:url('https://ws3.sinaimg.cn/large/0069RVTdly1fv9d1artqxj31kw1z4kjp.jpg');"
+             data-behavior="4">
+            
+        </div>
+
+            <div id="main" data-behavior="4"
+                 class="hasCover
+                        hasCoverMetaOut
+                        hasCoverCaption">
+                
+<article class="post">
+    
+        <span class="post-header-cover-caption caption">Lonely</span>
+    
+    
+        <div class="post-header main-content-wrap text-center">
+    
+        <h1 class="post-title">
+            Rev①
+        </h1>
+    
+    
+</div>
+
+    
+    <div class="post-content markdown">
+        <div class="main-content-wrap">
+            <p>一道简单的Reverse题，由蓝鲸安全平台提供</p>
+<p>题目：入门语言，地址：<a href="https://pan.baidu.com/s/1NfDsl9B7LoUeAwI5m66Hjg" target="_blank" rel="noopener">https://pan.baidu.com/s/1NfDsl9B7LoUeAwI5m66Hjg</a></p>
+<p>知识点：IDA分析，NOP指令，gdb调试</p>
+<a id="more"></a>
+<h1 id="table-of-contents">目录</h1><ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#背景知识"><span class="toc-text">背景知识</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#GDB概述"><span class="toc-text">GDB概述</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#GDB常用命令"><span class="toc-text">GDB常用命令</span></a><ol class="toc-child"><li class="toc-item toc-level-4"><a class="toc-link" href="#运行"><span class="toc-text">运行</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#设置断点"><span class="toc-text">设置断点</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#查看源代码"><span class="toc-text">查看源代码</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#打印表达式"><span class="toc-text">打印表达式</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#查询运行信息"><span class="toc-text">查询运行信息</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#分割窗口"><span class="toc-text">分割窗口</span></a></li></ol></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#题目解析"><span class="toc-text">题目解析</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#总结："><span class="toc-text">总结：</span></a></li></ol>
+<h2 id="背景知识"><a href="#背景知识" class="headerlink" title="背景知识"></a>背景知识</h2><h3 id="GDB概述"><a href="#GDB概述" class="headerlink" title="GDB概述"></a>GDB概述</h3><ul>
+<li>GDB是linux中的动静态分析调试工具，功能非常强大，不但可以静态分析程序代码；如果生成程序的时候带有调试信息，还能够看到相当于反汇编的源代码。</li>
+<li>同时GDB还是linux程序动态调试的绝佳工具。虽然是命令行程序相对比windows中的程序没有那么方便，但是使用起来非常灵活。我们可以下断点或者逐句调试。也可以设置寄存器或者汇编指令等。</li>
+<li>GDB作为命令行的调试工具，它的指令就比较重要了：首先启动gdb调试某个程序使用<strong>gdb \<filename></filename></strong> 启动。</li>
+</ul>
+<h3 id="GDB常用命令"><a href="#GDB常用命令" class="headerlink" title="GDB常用命令"></a>GDB常用命令</h3><h4 id="运行"><a href="#运行" class="headerlink" title="运行"></a>运行</h4><ul>
+<li><strong>run（简写r）</strong>：其作用是运行程序，当遇到断点后，程序会在断点处停止运行，等待用户输入下一步的命令；</li>
+<li><strong>continue（简写c）</strong>：继续执行，到下一个断点处（或运行结束）</li>
+<li><strong>next（简写n）</strong>：单步跟踪程序，当遇到函数调用，也不进入函数体；此命令同step的主要区别是，step遇到用户自定义的函数，将步入到函数中去运行，而next则直接调用函数，不会进入到函数体内。</li>
+<li><strong>step（简写s）</strong>：单步调试如果有函数调用，则进入函数；与命令n不同。</li>
+<li><strong>until</strong>：当在调试时厌倦了在一个循环体内单步跟踪时，这个命令可以运行程序直到退出循环体。</li>
+<li><strong>until+行号</strong>：运行至某行，不仅仅用来跳出循环。</li>
+<li><strong>finish</strong>：运行程序，直到当函数完成返回，并打印函数返回时的堆栈地址和返回值及参数值等信息。</li>
+<li><strong>call函数（参数）</strong>：调用程序中可见的函数，并传递“参数”，如：call gdb_test(33)</li>
+<li><strong>quit（简写q）</strong>：退出qdb</li>
+</ul>
+<h4 id="设置断点"><a href="#设置断点" class="headerlink" title="设置断点"></a>设置断点</h4><ul>
+<li><strong>break n（简写b n）</strong>：在第n行处设置断点</li>
+<li><strong>b fn1 if a&gt;b </strong>：条件断点设置</li>
+<li><strong>break func </strong>：在函数func（）的入口处设置断点，如：break main</li>
+<li><strong>delete 断点号n</strong>：删除第n个断点</li>
+<li><strong>disable断点号n</strong>：暂停第n个断点</li>
+<li><strong>enable断点号n</strong>：开启第n个断点</li>
+<li><strong>clear行号n</strong>：清除第n行的断点</li>
+<li><strong>info b</strong>：显示当前程序的断点设置情况</li>
+<li><strong>delete breakpoints</strong>：清除所有断点</li>
+</ul>
+<h4 id="查看源代码"><a href="#查看源代码" class="headerlink" title="查看源代码"></a>查看源代码</h4><ul>
+<li><strong>list 行号</strong>：将显示当前文件以“行号”为中心的前后10行代码</li>
+<li><strong>list函数名</strong>：将显示“函数名”所在函数的源代码</li>
+</ul>
+<h4 id="打印表达式"><a href="#打印表达式" class="headerlink" title="打印表达式"></a>打印表达式</h4><ul>
+<li><strong>print表达式（简写p）</strong>：其中“表达式”可以是任何当前正在被测试程序的有效表达式，假如当前正在调试C语言的程序，那么“表达式”可以是任何C语言的有效表达式，包括数字，变量甚至是函数调用。</li>
+<li><strong>print a</strong>：将显示整数a的值</li>
+<li><strong>print name</strong>：将显示字符串name的值</li>
+<li><strong>print gdb_test(22)</strong>：将以整数22作为参数调用gdb_test()函数</li>
+<li><strong>print gdb_test(a)</strong>：将以变量a作为参数调用gdb_test()函数</li>
+<li><strong>display 表达式</strong>：在单步调试非常有用，使用该命令设置一个表达式后，他将在每次单步进行指令后，紧接着输出被设置的表达式及其值。</li>
+<li><strong>watch 表达式</strong>：设置一个监视点，一旦被监视的“表达式“的值改变，gdb将强行终止正在被调试的程序。</li>
+<li><strong>whatis</strong>：查询变量或函数</li>
+<li><strong>info function</strong>：查询函数</li>
+<li><strong>info locals</strong>：显示当前堆栈页的所有变量</li>
+</ul>
+<h4 id="查询运行信息"><a href="#查询运行信息" class="headerlink" title="查询运行信息"></a>查询运行信息</h4><ul>
+<li><strong>where/bt</strong>：当前运行的堆栈列表</li>
+<li><strong>bt backtrace</strong>：显示当前调用堆栈</li>
+<li><strong>up/down</strong>：改变堆栈显示的深度</li>
+<li><strong>set args参数</strong>：指定运行时的参数</li>
+<li><strong>show args</strong>：查看设置好的参数</li>
+<li><strong>info program</strong>：来查看程序的是否在运行，进程号，被暂停的原因</li>
+</ul>
+<h4 id="分割窗口"><a href="#分割窗口" class="headerlink" title="分割窗口"></a>分割窗口</h4><ul>
+<li><strong>layout</strong>：用于分割窗口，可以一边查看代码，一边测试</li>
+<li><strong>layout src</strong>：显示源代码窗口</li>
+<li><strong>layout asm</strong>：显示反汇编窗口</li>
+<li><strong>layout regs</strong>：显示源代码/反汇编和CPU寄存器窗口</li>
+<li><strong>layout split</strong>：显示源代码和反汇编的窗口</li>
+<li><strong>Ctrl+L</strong>：刷新窗口</li>
+</ul>
+<h2 id="题目解析"><a href="#题目解析" class="headerlink" title="题目解析"></a>题目解析</h2><p> 拿到程序，首先使用<code>file</code>命令，分析程序结构，该程序是64位的ELF可执行程序，尝试执行，逻辑是输入密码后进行检查，经典的验证式CTF题目：</p>
+<p><img src="https://ws4.sinaimg.cn/large/006tNbRwly1fx7yw1zxrnj318a05odh3.jpg" alt=""></p>
+<p>接下来使用64位的IDA分析一下程序，找到main函数：</p>
+<p><img src="https://ws1.sinaimg.cn/large/006tNbRwly1fx7z9ys1s6j30mm0cyabv.jpg" alt=""></p>
+<p>定位到关键函数sub_4006FD，发现是个算法校验，可以直接写脚本解题</p>
+<p><img src="https://ws3.sinaimg.cn/large/006tNbRwly1fx7zb8gv3ej30kw09g3zw.jpg" alt=""></p>
+<p>脚本如下：密码  Code_Talkers</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">import</span> numpy <span class="keyword">as</span> np</span><br><span class="line">v3 = list(<span class="string">"DufhbmfpG`imosewUglpt"</span>)</span><br><span class="line"><span class="keyword">print</span> v3</span><br><span class="line">v4 = []</span><br><span class="line"><span class="keyword">for</span> i <span class="keyword">in</span> v3:</span><br><span class="line">	v4.append(ord(i))</span><br><span class="line"><span class="keyword">print</span> v4</span><br><span class="line">v4 = np.array(v4).reshape(<span class="number">3</span>,<span class="number">7</span>)</span><br><span class="line"></span><br><span class="line">a = <span class="string">''</span></span><br><span class="line"><span class="keyword">for</span> i <span class="keyword">in</span> range(<span class="number">12</span>):</span><br><span class="line">	<span class="keyword">print</span> chr(v4[i % <span class="number">3</span>][<span class="number">2</span> * (i / <span class="number">3</span>)])</span><br><span class="line">	a += chr(v4[i % <span class="number">3</span>][<span class="number">2</span> * (i / <span class="number">3</span>)] <span class="number">-1</span>)</span><br><span class="line"><span class="keyword">print</span> a</span><br></pre></td></tr></table></figure>
+<p>另一种方法通过使用gdb尝试动态调试进行解题：</p>
+<p>启动Gdb启动程序，执行start命令</p>
+<p><img src="https://ws2.sinaimg.cn/large/006tNbRwly1fx7zsijns1j30l4050gqf.jpg" alt=""></p>
+<p>程序阻塞了，我们用ctrl+z终止执行，看到停止的命令地址为：<code>0x00000000004007e4</code></p>
+<p><img src="https://ws4.sinaimg.cn/large/006tNbRwly1fx7zu4kwzlj312i0bcgng.jpg" alt=""></p>
+<p>返回IDA查看到底什么地方阻止程序的运行，在ida中使用快捷键g，输入刚才的内存地址</p>
+<p><img src="https://ws2.sinaimg.cn/large/006tNbRwly1fx7zw7zht6j30z4062dhf.jpg" alt=""></p>
+<p>发现是因为跳转到了一个子程序中loc_4007e4中。F5反汇编，看到了<strong>while 1</strong>的循环，原来根源在此</p>
+<p><img src="https://ws2.sinaimg.cn/large/006tNbRwly1fx7zyi825dj30ew0a4gme.jpg" alt=""></p>
+<p>返回到gdb中，我们使用两个<code>0x90(nop)</code>将跳转终止</p>
+<p>命令：<code>set *(byte)*0x4007e4=0x90</code> <code>set *(byte)*0x4007e5=0x90</code></p>
+<p>接着程序可以重新开始运行了，我们需要重新检查程序检验密码的地方，找到寄存器存放我们输入的值，并且离最后判断处最近一处设为断点。</p>
+<p><img src="https://ws3.sinaimg.cn/large/006tNbRwly1fx80klfv4fj30ok0jugql.jpg" alt=""></p>
+<p>找到最终判断在40078B的位置，而检验是通过eax和edx的差是否为1进行判断的，所以讲断点下到eax赋值的位置。</p>
+<p>使用命令<code>b *0x400784</code></p>
+<p><img src="https://ws2.sinaimg.cn/large/006tNbRwly1fx80ovsd6mj30j408475a.jpg" alt=""></p>
+<p>紧接着利用c执行到断点（两次执行，碰到主函数会有中断）</p>
+<p><img src="https://ws3.sinaimg.cn/large/006tNbRwly1fx814hdk49j30gi04ctbc.jpg" alt=""></p>
+<p>我们输入密码后运行到判断断点：</p>
+<p><img src="https://ws1.sinaimg.cn/large/006tNbRwly1fx8157ls83j30ca03i76s.jpg" alt=""></p>
+<p>使用print(p) \$edx和print(p) \$eax检查两个寄存器的值</p>
+<p><img src="https://ws2.sinaimg.cn/large/006tNbRwly1fx816wbq91j30cg052dis.jpg" alt=""></p>
+<p>可以看到eax为我们自己输入A的ascii码，那么对比的edx应该就是需要的密码对照值了，为了让程序继续，使用set命令讲eax设置为比edx小1的数（最后使用十进制）</p>
+<p><img src="https://ws1.sinaimg.cn/large/006tNbRwly1fx819a5nibj30ae046wfy.jpg" alt=""></p>
+<p>最后依次循环，直到输出nice的判断结果为止，收集到所有的edx的值，发现在可打印字符中。对应输出：</p>
+<p><img src="https://ws4.sinaimg.cn/large/006tNbRwly1fx81kr01l8j30cy02qwep.jpg" alt=""></p>
+<h2 id="总结："><a href="#总结：" class="headerlink" title="总结："></a>总结：</h2><p>这道题属于逆向中最简单的一种类型，这题主要是练习一下gdb的使用方法，总结了gdb常用命令，以后逐渐熟悉gdb调试器。</p>
+
+            
+
+        </div>
+    </div>
+    <div id="post-footer" class="post-footer main-content-wrap">
+        
+            <div class="post-footer-tags">
+                <span class="text-color-light text-small">标签</span><br/>
+                
+    <a class="tag tag--primary tag--small t-link" href="/tags/gdb/">gdb</a> <a class="tag tag--primary tag--small t-link" href="/tags/reverse/">reverse</a>
+
+            </div>
+        
+        
+        
+    </div>
+</article>
+
+
+
+                <footer id="footer" class="main-content-wrap">
+    <span class="copyrights">
+        Copyrights &copy; 2018 Yuan Shen. All Rights Reserved.
+    </span>
+</footer>
+
+            </div>
+            
+        </div>
+        
+
+
+    
+        
+    
+
+<div id="about">
+    <div id="about-card">
+        <div id="about-btn-close">
+            <i class="fa fa-times"></i>
+        </div>
+        
+            <img id="about-card-picture" src="/assets/images/yuan.jpg" alt="作者的图片"/>
+        
+            <h4 id="about-card-name">Yuan Shen</h4>
+        
+            <div id="about-card-bio"><p>author.bio</p>
+</div>
+        
+        
+            <div id="about-card-job">
+                <i class="fa fa-briefcase"></i>
+                <br/>
+                <p>author.job</p>
+
+            </div>
+        
+        
+    </div>
+</div>
+
+        
+        
+<div id="cover" style="background-image:url('/assets/images/cover.jpg');"></div>
+        <!--SCRIPTS-->
+<script src="/assets/js/script-vufjrm3fmbuttogo1hxuu0w9w0sesk5iyysjuguc2hdhufot9szxg8twijry.min.js"></script>
+<!--SCRIPTS END-->
+
+
+
+    </body>
+</html>
