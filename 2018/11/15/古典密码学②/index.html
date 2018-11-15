@@ -1,0 +1,310 @@
+
+<!DOCTYPE html>
+<html lang="zh-cn">
+    
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="generator" content="Ant Park">
+    <title>古典密码学② - Ant Park</title>
+    <meta name="author" content="Yuan Shen">
+    
+    
+        <link rel="icon" href="http://yoursite.com/assets/images/yuan.png">
+    
+    
+    <script type="application/ld+json">{"@context":"http://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Yuan Shen","sameAs":[],"image":"yuan.jpg"},"articleBody":"初级密码学题，由蓝鲸安全平台提供\n题目：失落的祝愿，文件地址：https://pan.baidu.com/s/1Xc2kxrQAxPS9AUJtZxXoVw\n题干：RSA的考古学家在亚马逊河流尽头找到古代神庙遗迹，在破解了遗迹语言后，为了向先灵们致敬，用他们的密码系统加密了破译资料后离开了。\n知识点：Maya numerals系统，RSA简单解密\n\n\n背景知识Maya numerals\n玛雅文明已知是人们热衷的研究领域，今天要介绍的时候玛雅数字系统。它是一个六度（基数为20）的位置数字系统。数字有三个符号组成：零（贝壳形状）、点、条。这种结构构成的数字系统很精巧，对于加减乘除之列的运算在图像上可以直接展现：\n\n\n\n玛雅人的数字也有“大小写”之分，这和中文很像，例如“一”对应“壹”，“二”对应“贰“等。玛雅人的数字大写是一些象形人头：\n\n\n\n那么玛雅人的数字系统是如何统计大数字呢（20以上的数字）：\n\n如今的数字系统，使用的是10进制，16进制等这些现代人或计算机习惯的进制；但是玛雅人的进制无比神奇，他们的计数方法让玛雅人在天文学方面的研究非常先进，他们计算的太阳日，也就是现在的年为：365.2422天，与现在的研究非常接近（我们闰年+1平均下来玛雅人的更为精准）。他们的数字系统不再是单一进制，而是4位数字占比例不同\n最高位：8000\n次高位：400\n第二位：20\n第一位：1\n\n\n题目解析拿到题目后，发现第一个知识点需要识别出图形是什么密码。可以从题目的提示：失落、亚马逊，神殿等词汇联想玛雅人。根据上述玛雅人计数系统，判断出\n\n根据上述玛雅人计数系统，判断出这三行符号是代表了3个数字，现将每个符号对应的数字找到，如下：\n\n接着利用maya数字系统的计算式：a*8000+b*400+c*20+d*1可以得到以下三个数字，不难检查出这三个数都是素数。\n1231*8000+7*400+15*20+13*1 = 111138*8000+17*400+15*20+19*1 = 711198*8000+3*400+16*20+17*1 = 65537\n然后，根据题目描述又想到RSA解密，而这三个数字猜测对应了p、q、e。\n123P=11113Q=71119E=65537\n然后利用rsatool计算出私钥d，如果想了解具体怎么算的，需要知道欧几里得算法（又称辗转相除法）。\n\n最后对密文进行解密plain = (cipher) ^d mod n，脚本如下：\n1234567891011p = 11113q = 71119n = p*qe = 65537d = 484260353f = open('./cipher.txt','r')msg = []for c in f:\tc = int(c,10)\tmsg.append(chr(pow(c,d,n)))print ''.join(msg)\n总结此题脑袋比较大，需要联想到玛雅文明，大家了解下就好了，对敬佩玛雅人的智慧。\n","dateCreated":"2018-11-15T15:21:50+08:00","dateModified":"2018-11-15T16:28:48+08:00","datePublished":"2018-11-15T15:21:50+08:00","description":"初级密码学题，由蓝鲸安全平台提供\n题目：失落的祝愿，文件地址：https://pan.baidu.com/s/1Xc2kxrQAxPS9AUJtZxXoVw\n题干：RSA的考古学家在亚马逊河流尽头找到古代神庙遗迹，在破解了遗迹语言后，为了向先灵们致敬，用他们的密码系统加密了破译资料后离开了。\n知识点：Maya numerals系统，RSA简单解密","headline":"古典密码学②","image":["https://ws2.sinaimg.cn/large/0069RVTdly1fv9d6x9yhjj30o60iqau7.jpg","https://ws3.sinaimg.cn/large/0069RVTdly1fv9d1artqxj31kw1z4kjp.jpg"],"mainEntityOfPage":{"@type":"WebPage","@id":"http://yoursite.com/2018/11/15/古典密码学②/"},"publisher":{"@type":"Organization","name":"Yuan Shen","sameAs":[],"image":"yuan.jpg","logo":{"@type":"ImageObject","url":"yuan.jpg"}},"url":"http://yoursite.com/2018/11/15/古典密码学②/","keywords":"Crypto, rsa, maya numerals","thumbnailUrl":"https://ws2.sinaimg.cn/large/0069RVTdly1fv9d6x9yhjj30o60iqau7.jpg"}</script>
+    <meta name="description" content="初级密码学题，由蓝鲸安全平台提供 题目：失落的祝愿，文件地址：https://pan.baidu.com/s/1Xc2kxrQAxPS9AUJtZxXoVw 题干：RSA的考古学家在亚马逊河流尽头找到古代神庙遗迹，在破解了遗迹语言后，为了向先灵们致敬，用他们的密码系统加密了破译资料后离开了。 知识点：Maya numerals系统，RSA简单解密">
+<meta name="keywords" content="Crypto,rsa,maya numerals">
+<meta property="og:type" content="blog">
+<meta property="og:title" content="古典密码学②">
+<meta property="og:url" content="http://yoursite.com/2018/11/15/古典密码学②/index.html">
+<meta property="og:site_name" content="Ant Park">
+<meta property="og:description" content="初级密码学题，由蓝鲸安全平台提供 题目：失落的祝愿，文件地址：https://pan.baidu.com/s/1Xc2kxrQAxPS9AUJtZxXoVw 题干：RSA的考古学家在亚马逊河流尽头找到古代神庙遗迹，在破解了遗迹语言后，为了向先灵们致敬，用他们的密码系统加密了破译资料后离开了。 知识点：Maya numerals系统，RSA简单解密">
+<meta property="og:locale" content="zh-cn">
+<meta property="og:image" content="https://ws4.sinaimg.cn/large/006tNbRwly1fx8shxp9tgj30y80e6afi.jpg">
+<meta property="og:image" content="https://ws3.sinaimg.cn/large/006tNbRwly1fx8slbfkd8j30me0fi4ku.jpg">
+<meta property="og:image" content="https://ws4.sinaimg.cn/large/006tNbRwly1fx8slqfij0j30dm0ta1kx.jpg">
+<meta property="og:image" content="https://ws4.sinaimg.cn/large/006tNbRwly1fx8su4pqsxj31160r2gwf.jpg">
+<meta property="og:image" content="https://ws3.sinaimg.cn/large/006tNbRwly1fx8sxl4gzqj30ak08kgpg.jpg">
+<meta property="og:image" content="https://ws2.sinaimg.cn/large/006tNbRwly1fx8szpkenjj30ic0c8wpd.jpg">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/006tNbRwly1fx8tq2gziuj30ei08e40r.jpg">
+<meta property="og:updated_time" content="2018-11-15T08:28:48.868Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="古典密码学②">
+<meta name="twitter:description" content="初级密码学题，由蓝鲸安全平台提供 题目：失落的祝愿，文件地址：https://pan.baidu.com/s/1Xc2kxrQAxPS9AUJtZxXoVw 题干：RSA的考古学家在亚马逊河流尽头找到古代神庙遗迹，在破解了遗迹语言后，为了向先灵们致敬，用他们的密码系统加密了破译资料后离开了。 知识点：Maya numerals系统，RSA简单解密">
+<meta name="twitter:image" content="https://ws4.sinaimg.cn/large/006tNbRwly1fx8shxp9tgj30y80e6afi.jpg">
+    
+    
+        
+    
+    
+        <meta property="og:image" content="http://yoursite.com/assets/images/yuan.jpg"/>
+    
+    
+        <meta property="og:image" content="https://ws2.sinaimg.cn/large/0069RVTdly1fv9d6x9yhjj30o60iqau7.jpg"/>
+        <meta class="swiftype" name="image" data-type="enum" content="https://ws2.sinaimg.cn/large/0069RVTdly1fv9d6x9yhjj30o60iqau7.jpg" />
+    
+    
+        <meta property="og:image" content="https://ws3.sinaimg.cn/large/0069RVTdly1fv9d1artqxj31kw1z4kjp.jpg"/>
+        <meta class="swiftype" name="image" data-type="enum" content="https://ws3.sinaimg.cn/large/0069RVTdly1fv9d1artqxj31kw1z4kjp.jpg" />
+    
+    
+    <!--STYLES-->
+    <link rel="stylesheet" href="/assets/css/style-du2xmrqdqrl2ollgeiw050kpl6l4nbyz7bumjuurjgsxyopifvukebxc9lqe.min.css">
+    <!--STYLES END-->
+    
+
+    
+</head>
+
+    <body>
+        <div id="blog">
+            <!-- Define author's picture -->
+
+
+    
+        
+            
+        
+    
+
+<header id="header" data-behavior="4">
+    <i id="btn-open-sidebar" class="fa fa-lg fa-bars"></i>
+    <div class="header-title">
+        <a class="header-title-link" href="/ ">Ant Park</a>
+    </div>
+    
+        
+            <a  class="header-right-picture "
+                href="#about">
+        
+        
+            <img class="header-picture" src="/assets/images/yuan.jpg" alt="作者的图片"/>
+        
+        </a>
+    
+</header>
+
+            <!-- Define author's picture -->
+
+
+
+        
+    
+
+<nav id="sidebar" data-behavior="4">
+    <div class="sidebar-container">
+        
+            <div class="sidebar-profile">
+                <a href="/#about">
+                    <img class="sidebar-profile-picture" src="/assets/images/yuan.jpg" alt="作者的图片"/>
+                </a>
+                <h4 class="sidebar-profile-name">Yuan Shen</h4>
+                
+                    <h5 class="sidebar-profile-bio"><p>author.bio</p>
+</h5>
+                
+            </div>
+        
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/ "
+                            
+                            title="首页"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-home" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">首页</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-categories"
+                            
+                            title="分类"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-bookmark" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">分类</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-tags"
+                            
+                            title="标签"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-tags" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">标签</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-archives"
+                            
+                            title="归档"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-archive" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">归档</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+    </div>
+</nav>
+
+            
+        <div class="post-header-cover
+                    text-center
+                    post-header-cover--partial"
+             style="background-image:url('https://ws3.sinaimg.cn/large/0069RVTdly1fv9d1artqxj31kw1z4kjp.jpg');"
+             data-behavior="4">
+            
+        </div>
+
+            <div id="main" data-behavior="4"
+                 class="hasCover
+                        hasCoverMetaOut
+                        hasCoverCaption">
+                
+<article class="post">
+    
+        <span class="post-header-cover-caption caption">Lonely</span>
+    
+    
+        <div class="post-header main-content-wrap text-center">
+    
+        <h1 class="post-title">
+            古典密码学②
+        </h1>
+    
+    
+</div>
+
+    
+    <div class="post-content markdown">
+        <div class="main-content-wrap">
+            <p>初级密码学题，由蓝鲸安全平台提供</p>
+<p>题目：失落的祝愿，文件地址：<a href="https://pan.baidu.com/s/1Xc2kxrQAxPS9AUJtZxXoVw" target="_blank" rel="noopener">https://pan.baidu.com/s/1Xc2kxrQAxPS9AUJtZxXoVw</a></p>
+<p>题干：RSA的考古学家在亚马逊河流尽头找到古代神庙遗迹，在破解了遗迹语言后，为了向先灵们致敬，用他们的密码系统加密了破译资料后离开了。</p>
+<p>知识点：Maya numerals系统，RSA简单解密</p>
+<a id="more"></a>
+<h1 id="table-of-contents">目录</h1><ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#背景知识"><span class="toc-text">背景知识</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#Maya-numerals"><span class="toc-text">Maya numerals</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#题目解析"><span class="toc-text">题目解析</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#总结"><span class="toc-text">总结</span></a></li></ol>
+<h2 id="背景知识"><a href="#背景知识" class="headerlink" title="背景知识"></a>背景知识</h2><h3 id="Maya-numerals"><a href="#Maya-numerals" class="headerlink" title="Maya numerals"></a>Maya numerals</h3><ul>
+<li>玛雅文明已知是人们热衷的研究领域，今天要介绍的时候玛雅数字系统。它是一个<code>六度（基数为20）</code>的位置数字系统。数字有三个符号组成：<strong>零（贝壳形状）、点、条</strong>。这种结构构成的数字系统很精巧，对于加减乘除之列的运算在图像上可以直接展现：</li>
+</ul>
+<p><img src="https://ws4.sinaimg.cn/large/006tNbRwly1fx8shxp9tgj30y80e6afi.jpg" alt=""></p>
+<ul>
+<li>玛雅人的数字也有“大小写”之分，这和中文很像，例如“一”对应“壹”，“二”对应“贰“等。玛雅人的数字大写是一些象形人头：</li>
+</ul>
+<p><img src="https://ws3.sinaimg.cn/large/006tNbRwly1fx8slbfkd8j30me0fi4ku.jpg" alt=""></p>
+<p><img src="https://ws4.sinaimg.cn/large/006tNbRwly1fx8slqfij0j30dm0ta1kx.jpg" alt=""></p>
+<p>那么玛雅人的数字系统是如何统计大数字呢<strong>（20以上的数字）</strong>：</p>
+<ul>
+<li>如今的数字系统，使用的是10进制，16进制等这些现代人或计算机习惯的进制；但是玛雅人的进制无比神奇，他们的计数方法让玛雅人在天文学方面的研究非常先进，他们计算的太阳日，也就是现在的年为：<strong>365.2422天</strong>，与现在的研究非常接近（我们闰年+1平均下来玛雅人的更为精准）。他们的数字系统不再是单一进制，而是4位数字占比例不同</li>
+<li>最高位：<strong>8000</strong></li>
+<li>次高位：<strong>400</strong></li>
+<li>第二位：<strong>20</strong></li>
+<li>第一位：<strong>1</strong></li>
+</ul>
+<p><img src="https://ws4.sinaimg.cn/large/006tNbRwly1fx8su4pqsxj31160r2gwf.jpg" alt=""></p>
+<h2 id="题目解析"><a href="#题目解析" class="headerlink" title="题目解析"></a>题目解析</h2><p>拿到题目后，发现第一个知识点需要识别出图形是什么密码。可以从题目的提示：失落、亚马逊，神殿等词汇联想玛雅人。根据上述玛雅人计数系统，判断出</p>
+<p><img src="https://ws3.sinaimg.cn/large/006tNbRwly1fx8sxl4gzqj30ak08kgpg.jpg" alt=""></p>
+<p>根据上述玛雅人计数系统，判断出这三行符号是代表了3个数字，现将每个符号对应的数字找到，如下：</p>
+<p><img src="https://ws2.sinaimg.cn/large/006tNbRwly1fx8szpkenjj30ic0c8wpd.jpg" alt=""></p>
+<p>接着利用maya数字系统的计算式：<code>a*8000+b*400+c*20+d*1</code>可以得到以下三个数字，不难检查出这三个数都是素数。</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">1*8000+7*400+15*20+13*1 = 11113</span><br><span class="line">8*8000+17*400+15*20+19*1 = 71119</span><br><span class="line">8*8000+3*400+16*20+17*1 = 65537</span><br></pre></td></tr></table></figure>
+<p>然后，根据题目描述又想到RSA解密，而这三个数字猜测对应了p、q、e。</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">P=11113</span><br><span class="line">Q=71119</span><br><span class="line">E=65537</span><br></pre></td></tr></table></figure>
+<p>然后利用rsatool计算出私钥d，如果想了解具体怎么算的，需要知道欧几里得算法（又称辗转相除法）。</p>
+<p><img src="https://ws1.sinaimg.cn/large/006tNbRwly1fx8tq2gziuj30ei08e40r.jpg" alt=""></p>
+<p>最后对密文进行解密<code>plain = (cipher) ^d mod n</code>，脚本如下：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line">p = <span class="number">11113</span></span><br><span class="line">q = <span class="number">71119</span></span><br><span class="line">n = p*q</span><br><span class="line">e = <span class="number">65537</span></span><br><span class="line">d = <span class="number">484260353</span></span><br><span class="line">f = open(<span class="string">'./cipher.txt'</span>,<span class="string">'r'</span>)</span><br><span class="line">msg = []</span><br><span class="line"><span class="keyword">for</span> c <span class="keyword">in</span> f:</span><br><span class="line">	c = int(c,<span class="number">10</span>)</span><br><span class="line">	msg.append(chr(pow(c,d,n)))</span><br><span class="line"><span class="keyword">print</span> <span class="string">''</span>.join(msg)</span><br></pre></td></tr></table></figure>
+<h2 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h2><p>此题脑袋比较大，需要联想到玛雅文明，大家了解下就好了，对敬佩玛雅人的智慧。</p>
+
+            
+
+        </div>
+    </div>
+    <div id="post-footer" class="post-footer main-content-wrap">
+        
+            <div class="post-footer-tags">
+                <span class="text-color-light text-small">标签</span><br/>
+                
+    <a class="tag tag--primary tag--small t-link" href="/tags/Crypto/">Crypto</a> <a class="tag tag--primary tag--small t-link" href="/tags/maya-numerals/">maya numerals</a> <a class="tag tag--primary tag--small t-link" href="/tags/rsa/">rsa</a>
+
+            </div>
+        
+        
+        
+    </div>
+</article>
+
+
+
+                <footer id="footer" class="main-content-wrap">
+    <span class="copyrights">
+        Copyrights &copy; 2018 Yuan Shen. All Rights Reserved.
+    </span>
+</footer>
+
+            </div>
+            
+        </div>
+        
+
+
+    
+        
+    
+
+<div id="about">
+    <div id="about-card">
+        <div id="about-btn-close">
+            <i class="fa fa-times"></i>
+        </div>
+        
+            <img id="about-card-picture" src="/assets/images/yuan.jpg" alt="作者的图片"/>
+        
+            <h4 id="about-card-name">Yuan Shen</h4>
+        
+            <div id="about-card-bio"><p>author.bio</p>
+</div>
+        
+        
+            <div id="about-card-job">
+                <i class="fa fa-briefcase"></i>
+                <br/>
+                <p>author.job</p>
+
+            </div>
+        
+        
+    </div>
+</div>
+
+        
+        
+<div id="cover" style="background-image:url('/assets/images/cover.jpg');"></div>
+        <!--SCRIPTS-->
+<script src="/assets/js/script-vufjrm3fmbuttogo1hxuu0w9w0sesk5iyysjuguc2hdhufot9szxg8twijry.min.js"></script>
+<!--SCRIPTS END-->
+
+
+
+    </body>
+</html>
