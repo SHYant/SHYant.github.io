@@ -1,0 +1,283 @@
+
+<!DOCTYPE html>
+<html lang="zh-cn">
+    
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="generator" content="Ant Park">
+    <title>现代密码学① - Ant Park</title>
+    <meta name="author" content="Yuan Shen">
+    
+    
+        <link rel="icon" href="http://yoursite.com/assets/images/yuan.png">
+    
+    
+    <script type="application/ld+json">{"@context":"http://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Yuan Shen","sameAs":[],"image":"yuan.jpg"},"articleBody":"湖湘杯 Common Crypto\n本题是一道逆向密码学题，https://pan.baidu.com/s/1z9kQF-d34aBi4_wjQQ1p9w\n知识点：AES加密\n\n\n背景知识AES加密IDA plugin题目解析首先利用file命令发现是64位的exe可执行文件，运行提示：Please enter flag:，然后随便输入什么，直接退出，没有错误之类的提示。\n利用IDA分析，搜索字符串Please enter….，找到关键函数也就是main函数，然后利用IDA plugin Findcrypt 发现AES加密算法继续分析，找到AES密钥和AES加密算法函数，如下图所示：\n\n需要我们找到AES加密密钥，通过分析产生密钥的函数，发现byte_14001DA40地址的数组可能是密钥。\n\n\n然后分析AES加密算法函数，发现就是使用了上述的数组，所以解题思路就非常清楚啦，利用python脚本对最后要比较的密文进行解密：\n12345from Crypto.Cipher import AESkey = '\\x1b\\x2e\\x35\\x46\\x58\\x6e\\x72\\x86\\x9b\\xa7\\xb5\\xc8\\xd9\\xef\\xff\\x0c'ciphertext = raw_input('please input ciphertext:').decode('hex')decodesys = AES.new(key,AES.MODE_ECB)print decodesys.decrypt(ciphertext)[:16] + ciphertext[-16:] + '&#125;'\n解得Flag为：hxb2018{bc69322f3bd02f545c702801}\n","dateCreated":"2018-11-22T16:04:50+08:00","dateModified":"2018-11-22T16:40:17+08:00","datePublished":"2018-11-22T16:04:50+08:00","description":"湖湘杯 Common Crypto\n本题是一道逆向密码学题，https://pan.baidu.com/s/1z9kQF-d34aBi4_wjQQ1p9w\n知识点：AES加密","headline":"现代密码学①","image":["https://ws2.sinaimg.cn/large/0069RVTdly1fv9d6x9yhjj30o60iqau7.jpg","https://ws3.sinaimg.cn/large/0069RVTdly1fv9d1artqxj31kw1z4kjp.jpg"],"mainEntityOfPage":{"@type":"WebPage","@id":"http://yoursite.com/2018/11/22/现代密码学①/"},"publisher":{"@type":"Organization","name":"Yuan Shen","sameAs":[],"image":"yuan.jpg","logo":{"@type":"ImageObject","url":"yuan.jpg"}},"url":"http://yoursite.com/2018/11/22/现代密码学①/","keywords":"Crypto, AES","thumbnailUrl":"https://ws2.sinaimg.cn/large/0069RVTdly1fv9d6x9yhjj30o60iqau7.jpg"}</script>
+    <meta name="description" content="湖湘杯 Common Crypto 本题是一道逆向密码学题，https://pan.baidu.com/s/1z9kQF-d34aBi4_wjQQ1p9w 知识点：AES加密">
+<meta name="keywords" content="Crypto,AES">
+<meta property="og:type" content="blog">
+<meta property="og:title" content="现代密码学①">
+<meta property="og:url" content="http://yoursite.com/2018/11/22/现代密码学①/index.html">
+<meta property="og:site_name" content="Ant Park">
+<meta property="og:description" content="湖湘杯 Common Crypto 本题是一道逆向密码学题，https://pan.baidu.com/s/1z9kQF-d34aBi4_wjQQ1p9w 知识点：AES加密">
+<meta property="og:locale" content="zh-cn">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/006tNbRwly1fxgx3bmwo0j30yo0rqq8z.jpg">
+<meta property="og:image" content="https://ws2.sinaimg.cn/large/006tNbRwly1fxgx6y9vujj30gu0po78a.jpg">
+<meta property="og:image" content="http://yoursite.com/Users/sy/Library/Application%20Support/typora-user-images/image-20181122163038693.png">
+<meta property="og:updated_time" content="2018-11-22T08:40:17.117Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="现代密码学①">
+<meta name="twitter:description" content="湖湘杯 Common Crypto 本题是一道逆向密码学题，https://pan.baidu.com/s/1z9kQF-d34aBi4_wjQQ1p9w 知识点：AES加密">
+<meta name="twitter:image" content="https://ws1.sinaimg.cn/large/006tNbRwly1fxgx3bmwo0j30yo0rqq8z.jpg">
+    
+    
+        
+    
+    
+        <meta property="og:image" content="http://yoursite.com/assets/images/yuan.jpg"/>
+    
+    
+        <meta property="og:image" content="https://ws2.sinaimg.cn/large/0069RVTdly1fv9d6x9yhjj30o60iqau7.jpg"/>
+        <meta class="swiftype" name="image" data-type="enum" content="https://ws2.sinaimg.cn/large/0069RVTdly1fv9d6x9yhjj30o60iqau7.jpg" />
+    
+    
+        <meta property="og:image" content="https://ws3.sinaimg.cn/large/0069RVTdly1fv9d1artqxj31kw1z4kjp.jpg"/>
+        <meta class="swiftype" name="image" data-type="enum" content="https://ws3.sinaimg.cn/large/0069RVTdly1fv9d1artqxj31kw1z4kjp.jpg" />
+    
+    
+    <!--STYLES-->
+    <link rel="stylesheet" href="/assets/css/style-du2xmrqdqrl2ollgeiw050kpl6l4nbyz7bumjuurjgsxyopifvukebxc9lqe.min.css">
+    <!--STYLES END-->
+    
+
+    
+</head>
+
+    <body>
+        <div id="blog">
+            <!-- Define author's picture -->
+
+
+    
+        
+            
+        
+    
+
+<header id="header" data-behavior="4">
+    <i id="btn-open-sidebar" class="fa fa-lg fa-bars"></i>
+    <div class="header-title">
+        <a class="header-title-link" href="/ ">Ant Park</a>
+    </div>
+    
+        
+            <a  class="header-right-picture "
+                href="#about">
+        
+        
+            <img class="header-picture" src="/assets/images/yuan.jpg" alt="作者的图片"/>
+        
+        </a>
+    
+</header>
+
+            <!-- Define author's picture -->
+
+
+
+        
+    
+
+<nav id="sidebar" data-behavior="4">
+    <div class="sidebar-container">
+        
+            <div class="sidebar-profile">
+                <a href="/#about">
+                    <img class="sidebar-profile-picture" src="/assets/images/yuan.jpg" alt="作者的图片"/>
+                </a>
+                <h4 class="sidebar-profile-name">Yuan Shen</h4>
+                
+                    <h5 class="sidebar-profile-bio"><p>author.bio</p>
+</h5>
+                
+            </div>
+        
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/ "
+                            
+                            title="首页"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-home" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">首页</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-categories"
+                            
+                            title="分类"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-bookmark" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">分类</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-tags"
+                            
+                            title="标签"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-tags" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">标签</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-archives"
+                            
+                            title="归档"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-archive" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">归档</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+    </div>
+</nav>
+
+            
+        <div class="post-header-cover
+                    text-center
+                    post-header-cover--partial"
+             style="background-image:url('https://ws3.sinaimg.cn/large/0069RVTdly1fv9d1artqxj31kw1z4kjp.jpg');"
+             data-behavior="4">
+            
+        </div>
+
+            <div id="main" data-behavior="4"
+                 class="hasCover
+                        hasCoverMetaOut
+                        hasCoverCaption">
+                
+<article class="post">
+    
+        <span class="post-header-cover-caption caption">Lonely</span>
+    
+    
+        <div class="post-header main-content-wrap text-center">
+    
+        <h1 class="post-title">
+            现代密码学①
+        </h1>
+    
+    
+</div>
+
+    
+    <div class="post-content markdown">
+        <div class="main-content-wrap">
+            <p>湖湘杯 Common Crypto</p>
+<p>本题是一道逆向密码学题，<a href="https://pan.baidu.com/s/1z9kQF-d34aBi4_wjQQ1p9w" target="_blank" rel="noopener">https://pan.baidu.com/s/1z9kQF-d34aBi4_wjQQ1p9w</a></p>
+<p>知识点：AES加密</p>
+<a id="more"></a>
+<h1 id="table-of-contents">目录</h1><ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#背景知识"><span class="toc-text">背景知识</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#AES加密"><span class="toc-text">AES加密</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#IDA-plugin"><span class="toc-text">IDA plugin</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#题目解析"><span class="toc-text">题目解析</span></a></li></ol></li></ol>
+<h2 id="背景知识"><a href="#背景知识" class="headerlink" title="背景知识"></a>背景知识</h2><h3 id="AES加密"><a href="#AES加密" class="headerlink" title="AES加密"></a>AES加密</h3><h3 id="IDA-plugin"><a href="#IDA-plugin" class="headerlink" title="IDA plugin"></a>IDA plugin</h3><h3 id="题目解析"><a href="#题目解析" class="headerlink" title="题目解析"></a>题目解析</h3><p>首先利用file命令发现是64位的exe可执行文件，运行提示：<code>Please enter flag:</code>，然后随便输入什么，直接退出，没有错误之类的提示。</p>
+<p>利用IDA分析，搜索字符串Please enter….，找到关键函数也就是main函数，然后利用IDA plugin Findcrypt 发现AES加密算法继续分析，找到AES密钥和AES加密算法函数，如下图所示：</p>
+<p><img src="https://ws1.sinaimg.cn/large/006tNbRwly1fxgx3bmwo0j30yo0rqq8z.jpg" alt=""></p>
+<p>需要我们找到AES加密密钥，通过分析产生密钥的函数，发现<code>byte_14001DA40</code>地址的数组可能是密钥。</p>
+<p><img src="https://ws2.sinaimg.cn/large/006tNbRwly1fxgx6y9vujj30gu0po78a.jpg" alt=""></p>
+<p><img src="/Users/sy/Library/Application Support/typora-user-images/image-20181122163038693.png" alt="image-20181122163038693"></p>
+<p>然后分析AES加密算法函数，发现就是使用了上述的数组，所以解题思路就非常清楚啦，利用python脚本对最后要比较的密文进行解密：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">from</span> Crypto.Cipher <span class="keyword">import</span> AES</span><br><span class="line">key = <span class="string">'\x1b\x2e\x35\x46\x58\x6e\x72\x86\x9b\xa7\xb5\xc8\xd9\xef\xff\x0c'</span></span><br><span class="line">ciphertext = raw_input(<span class="string">'please input ciphertext:'</span>).decode(<span class="string">'hex'</span>)</span><br><span class="line">decodesys = AES.new(key,AES.MODE_ECB)</span><br><span class="line"><span class="keyword">print</span> decodesys.decrypt(ciphertext)[:<span class="number">16</span>] + ciphertext[<span class="number">-16</span>:] + <span class="string">'&#125;'</span></span><br></pre></td></tr></table></figure>
+<p>解得Flag为：hxb2018{bc69322f3bd02f545c702801}</p>
+
+            
+
+        </div>
+    </div>
+    <div id="post-footer" class="post-footer main-content-wrap">
+        
+            <div class="post-footer-tags">
+                <span class="text-color-light text-small">标签</span><br/>
+                
+    <a class="tag tag--primary tag--small t-link" href="/tags/AES/">AES</a> <a class="tag tag--primary tag--small t-link" href="/tags/Crypto/">Crypto</a>
+
+            </div>
+        
+        
+        
+    </div>
+</article>
+
+
+
+                <footer id="footer" class="main-content-wrap">
+    <span class="copyrights">
+        Copyrights &copy; 2018 Yuan Shen. All Rights Reserved.
+    </span>
+</footer>
+
+            </div>
+            
+        </div>
+        
+
+
+    
+        
+    
+
+<div id="about">
+    <div id="about-card">
+        <div id="about-btn-close">
+            <i class="fa fa-times"></i>
+        </div>
+        
+            <img id="about-card-picture" src="/assets/images/yuan.jpg" alt="作者的图片"/>
+        
+            <h4 id="about-card-name">Yuan Shen</h4>
+        
+            <div id="about-card-bio"><p>author.bio</p>
+</div>
+        
+        
+            <div id="about-card-job">
+                <i class="fa fa-briefcase"></i>
+                <br/>
+                <p>author.job</p>
+
+            </div>
+        
+        
+    </div>
+</div>
+
+        
+        
+<div id="cover" style="background-image:url('/assets/images/cover.jpg');"></div>
+        <!--SCRIPTS-->
+<script src="/assets/js/script-vufjrm3fmbuttogo1hxuu0w9w0sesk5iyysjuguc2hdhufot9szxg8twijry.min.js"></script>
+<!--SCRIPTS END-->
+
+
+
+    </body>
+</html>
