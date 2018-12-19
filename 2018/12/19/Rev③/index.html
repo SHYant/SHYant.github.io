@@ -1,0 +1,302 @@
+
+<!DOCTYPE html>
+<html lang="zh-cn">
+    
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="generator" content="Ant Park">
+    <title>Rev③ - Ant Park</title>
+    <meta name="author" content="Yuan Shen">
+    
+    
+        <link rel="icon" href="http://yoursite.com/assets/images/yuan.png">
+    
+    
+    <script type="application/ld+json">{"@context":"http://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Yuan Shen","sameAs":[],"image":"yuan.jpg"},"articleBody":"一道简单的Reverse题，由蓝鲸安全平台提供，相关的知识点已经都在之前的文章中介绍过了，所以就当做一次小的练习题。\n题目：转子检查，达到足够分数得到flag。地址：https://pan.baidu.com/s/1eqHYMTIpfRR2q3GtUfJCWQ\n知识点：程序分析，IDA动态调试，GDB动态调试\n\n\n题目解析直接运行程序，要求我们输入密码。\n\n检测程序为ELF64位可执行程序。\n\n方法一（IDA静态分析）程序内容很简单，要求输入密码后经过函数sub_40074D检查：\n\n进入到此函数，发现该函数定义了两个数组进行判断，v9[]能够在该函数中找到；\n\n因为v5影响v4的值，v4影响着v6的值，而最后判断是v6，所以另一个数组应该是v5。\nv5 = qword_601080，通过交叉引用发现，该值在main函数中进行了动态分配后进行的复制也就是传递个v5：\n\n在10次的循环中，每次复值4位，第一位m，递增赋值，类似凯撒密码的ROT循环产生了后13位的英文字母，结果就是[m,n,o,p,q,r,s,t,u,v,w,x,y,z]\n所以回到检测函数，python还原检查代码为：\n123456789101112def check(password):    v9 = [5,2,7,2,5,6]    v5 = ['m','n','o','p','q','r','s','t','u','v','w','x','y','z']    print v5.index['m']    chk = []    for i in range(6):        chk.append(v5.index(password[i]))    for i in range(6):        if chk[i]==v9[i]:            return 1        else:            return 0\n简而言之就是利用动态生成的v5序列作为字典，先用密码在字典中寻找序号，最终比对v9的序号和密码的序号是否一致。\n最终简单解密为，直接用v9当做序号去输出v6的内容：\n1234v9 = [5,2,7,2,5,6]v5 = ['m','n','o','p','q','r','s','t','u','v','w','x','y','z']for i in range(6):    print v5[v9[i]]\n答案是rotors\n方法二（IDA动态调试）IDA动态调试的方法就不具体说了，之前有介绍过，当我们利用IDA调试的时候遇到反调问题，程序会进入之个死循环当中。\n\n然后暂停程序，可以直接设置EIP指向main函数后再继续运行，这样跳过反调代码。然后在关键的sub_40074D函数中设置了四个断点进行分析，单步调试，如下图所示：\n\n程序的整个流程是①②③④这个顺序进行的，但我们分析程序形成的思路顺序是①④③②。\n总结题目简单，对之前的知识进行了回顾练习，提高程序的分析能力。\n","dateCreated":"2018-12-19T16:14:53+08:00","dateModified":"2018-12-19T22:07:36+08:00","datePublished":"2018-12-19T16:14:53+08:00","description":"一道简单的Reverse题，由蓝鲸安全平台提供，相关的知识点已经都在之前的文章中介绍过了，所以就当做一次小的练习题。\n题目：转子检查，达到足够分数得到flag。地址：https://pan.baidu.com/s/1eqHYMTIpfRR2q3GtUfJCWQ\n知识点：程序分析，IDA动态调试，GDB动态调试","headline":"Rev③","image":["https://ws2.sinaimg.cn/large/0069RVTdly1fv9d6x9yhjj30o60iqau7.jpg","https://ws3.sinaimg.cn/large/0069RVTdly1fv9d1artqxj31kw1z4kjp.jpg"],"mainEntityOfPage":{"@type":"WebPage","@id":"http://yoursite.com/2018/12/19/Rev③/"},"publisher":{"@type":"Organization","name":"Yuan Shen","sameAs":[],"image":"yuan.jpg","logo":{"@type":"ImageObject","url":"yuan.jpg"}},"url":"http://yoursite.com/2018/12/19/Rev③/","keywords":"reverse, ida","thumbnailUrl":"https://ws2.sinaimg.cn/large/0069RVTdly1fv9d6x9yhjj30o60iqau7.jpg"}</script>
+    <meta name="description" content="一道简单的Reverse题，由蓝鲸安全平台提供，相关的知识点已经都在之前的文章中介绍过了，所以就当做一次小的练习题。 题目：转子检查，达到足够分数得到flag。地址：https://pan.baidu.com/s/1eqHYMTIpfRR2q3GtUfJCWQ 知识点：程序分析，IDA动态调试，GDB动态调试">
+<meta name="keywords" content="reverse,ida">
+<meta property="og:type" content="blog">
+<meta property="og:title" content="Rev③">
+<meta property="og:url" content="http://yoursite.com/2018/12/19/Rev③/index.html">
+<meta property="og:site_name" content="Ant Park">
+<meta property="og:description" content="一道简单的Reverse题，由蓝鲸安全平台提供，相关的知识点已经都在之前的文章中介绍过了，所以就当做一次小的练习题。 题目：转子检查，达到足够分数得到flag。地址：https://pan.baidu.com/s/1eqHYMTIpfRR2q3GtUfJCWQ 知识点：程序分析，IDA动态调试，GDB动态调试">
+<meta property="og:locale" content="zh-cn">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/006tNbRwly1fyc9te9wcmj30e803275x.jpg">
+<meta property="og:image" content="https://ws3.sinaimg.cn/large/006tNbRwly1fyc9wdfc8cj313203mq7f.jpg">
+<meta property="og:image" content="https://ws4.sinaimg.cn/large/006tNbRwly1fyca01wgvqj30g008wdgu.jpg">
+<meta property="og:image" content="https://ws4.sinaimg.cn/large/006tNbRwly1fycel42ep1j30io0hiq4l.jpg">
+<meta property="og:image" content="https://ws2.sinaimg.cn/large/006tNbRwly1fycadrsajoj30do054js2.jpg">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/006tNbRwly1fycejv0uugj30so0l4aco.jpg">
+<meta property="og:image" content="https://ws4.sinaimg.cn/large/006tNbRwly1fyce4jxaa9j317w0mm7df.jpg">
+<meta property="og:updated_time" content="2018-12-19T14:07:36.813Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Rev③">
+<meta name="twitter:description" content="一道简单的Reverse题，由蓝鲸安全平台提供，相关的知识点已经都在之前的文章中介绍过了，所以就当做一次小的练习题。 题目：转子检查，达到足够分数得到flag。地址：https://pan.baidu.com/s/1eqHYMTIpfRR2q3GtUfJCWQ 知识点：程序分析，IDA动态调试，GDB动态调试">
+<meta name="twitter:image" content="https://ws1.sinaimg.cn/large/006tNbRwly1fyc9te9wcmj30e803275x.jpg">
+    
+    
+        
+    
+    
+        <meta property="og:image" content="http://yoursite.com/assets/images/yuan.jpg"/>
+    
+    
+        <meta property="og:image" content="https://ws2.sinaimg.cn/large/0069RVTdly1fv9d6x9yhjj30o60iqau7.jpg"/>
+        <meta class="swiftype" name="image" data-type="enum" content="https://ws2.sinaimg.cn/large/0069RVTdly1fv9d6x9yhjj30o60iqau7.jpg" />
+    
+    
+        <meta property="og:image" content="https://ws3.sinaimg.cn/large/0069RVTdly1fv9d1artqxj31kw1z4kjp.jpg"/>
+        <meta class="swiftype" name="image" data-type="enum" content="https://ws3.sinaimg.cn/large/0069RVTdly1fv9d1artqxj31kw1z4kjp.jpg" />
+    
+    
+    <!--STYLES-->
+    <link rel="stylesheet" href="/assets/css/style-du2xmrqdqrl2ollgeiw050kpl6l4nbyz7bumjuurjgsxyopifvukebxc9lqe.min.css">
+    <!--STYLES END-->
+    
+
+    
+</head>
+
+    <body>
+        <div id="blog">
+            <!-- Define author's picture -->
+
+
+    
+        
+            
+        
+    
+
+<header id="header" data-behavior="4">
+    <i id="btn-open-sidebar" class="fa fa-lg fa-bars"></i>
+    <div class="header-title">
+        <a class="header-title-link" href="/ ">Ant Park</a>
+    </div>
+    
+        
+            <a  class="header-right-picture "
+                href="#about">
+        
+        
+            <img class="header-picture" src="/assets/images/yuan.jpg" alt="作者的图片"/>
+        
+        </a>
+    
+</header>
+
+            <!-- Define author's picture -->
+
+
+
+        
+    
+
+<nav id="sidebar" data-behavior="4">
+    <div class="sidebar-container">
+        
+            <div class="sidebar-profile">
+                <a href="/#about">
+                    <img class="sidebar-profile-picture" src="/assets/images/yuan.jpg" alt="作者的图片"/>
+                </a>
+                <h4 class="sidebar-profile-name">Yuan Shen</h4>
+                
+                    <h5 class="sidebar-profile-bio"><p>author.bio</p>
+</h5>
+                
+            </div>
+        
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/ "
+                            
+                            title="首页"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-home" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">首页</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-categories"
+                            
+                            title="分类"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-bookmark" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">分类</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-tags"
+                            
+                            title="标签"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-tags" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">标签</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-archives"
+                            
+                            title="归档"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-archive" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">归档</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+    </div>
+</nav>
+
+            
+        <div class="post-header-cover
+                    text-center
+                    post-header-cover--full"
+             style="background-image:url('https://ws3.sinaimg.cn/large/0069RVTdly1fv9d1artqxj31kw1z4kjp.jpg');"
+             data-behavior="4">
+            
+        </div>
+
+            <div id="main" data-behavior="4"
+                 class="hasCover
+                        hasCoverMetaOut
+                        hasCoverCaption">
+                
+<article class="post">
+    
+        <span class="post-header-cover-caption caption">Lonely</span>
+    
+    
+        <div class="post-header main-content-wrap text-center">
+    
+        <h1 class="post-title">
+            Rev③
+        </h1>
+    
+    
+</div>
+
+    
+    <div class="post-content markdown">
+        <div class="main-content-wrap">
+            <p>一道简单的Reverse题，由蓝鲸安全平台提供，相关的知识点已经都在之前的文章中介绍过了，所以就当做一次小的练习题。</p>
+<p>题目：转子检查，达到足够分数得到flag。地址：<a href="https://pan.baidu.com/s/1eqHYMTIpfRR2q3GtUfJCWQ" target="_blank" rel="noopener">https://pan.baidu.com/s/1eqHYMTIpfRR2q3GtUfJCWQ</a></p>
+<p>知识点：程序分析，IDA动态调试，GDB动态调试</p>
+<a id="more"></a>
+<h1 id="table-of-contents">目录</h1><ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#题目解析"><span class="toc-text">题目解析</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#方法一（IDA静态分析）"><span class="toc-text">方法一（IDA静态分析）</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#方法二（IDA动态调试）"><span class="toc-text">方法二（IDA动态调试）</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#总结"><span class="toc-text">总结</span></a></li></ol>
+<h2 id="题目解析"><a href="#题目解析" class="headerlink" title="题目解析"></a>题目解析</h2><p>直接运行程序，要求我们输入密码。</p>
+<p><img src="https://ws1.sinaimg.cn/large/006tNbRwly1fyc9te9wcmj30e803275x.jpg" width="50%" height="50%"></p>
+<p>检测程序为ELF64位可执行程序。</p>
+<p><img src="https://ws3.sinaimg.cn/large/006tNbRwly1fyc9wdfc8cj313203mq7f.jpg" alt=""></p>
+<h3 id="方法一（IDA静态分析）"><a href="#方法一（IDA静态分析）" class="headerlink" title="方法一（IDA静态分析）"></a>方法一（IDA静态分析）</h3><p>程序内容很简单，要求输入密码后经过函数<code>sub_40074D</code>检查：</p>
+<p><img src="https://ws4.sinaimg.cn/large/006tNbRwly1fyca01wgvqj30g008wdgu.jpg" width="50%" height="50%"></p>
+<p>进入到此函数，发现该函数定义了两个数组进行判断，<code>v9[]</code>能够在该函数中找到；</p>
+<p><img src="https://ws4.sinaimg.cn/large/006tNbRwly1fycel42ep1j30io0hiq4l.jpg" width="50%" height="50%"></p>
+<p>因为v5影响v4的值，v4影响着v6的值，而最后判断是v6，所以另一个数组应该是<code>v5</code>。</p>
+<p><code>v5 = qword_601080</code>，通过交叉引用发现，该值在<code>main函数</code>中进行了动态分配后进行的复制也就是传递个v5：</p>
+<p><img src="https://ws2.sinaimg.cn/large/006tNbRwly1fycadrsajoj30do054js2.jpg" width="50%" height="50%"></p>
+<p>在10次的循环中，每次复值4位，第一位m，递增赋值，类似凯撒密码的ROT循环产生了后13位的英文字母，结果就是<code>[m,n,o,p,q,r,s,t,u,v,w,x,y,z]</code></p>
+<p>所以回到检测函数，python还原检查代码为：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">check</span><span class="params">(password)</span>:</span></span><br><span class="line">    v9 = [<span class="number">5</span>,<span class="number">2</span>,<span class="number">7</span>,<span class="number">2</span>,<span class="number">5</span>,<span class="number">6</span>]</span><br><span class="line">    v5 = [<span class="string">'m'</span>,<span class="string">'n'</span>,<span class="string">'o'</span>,<span class="string">'p'</span>,<span class="string">'q'</span>,<span class="string">'r'</span>,<span class="string">'s'</span>,<span class="string">'t'</span>,<span class="string">'u'</span>,<span class="string">'v'</span>,<span class="string">'w'</span>,<span class="string">'x'</span>,<span class="string">'y'</span>,<span class="string">'z'</span>]</span><br><span class="line">    <span class="keyword">print</span> v5.index[<span class="string">'m'</span>]</span><br><span class="line">    chk = []</span><br><span class="line">    <span class="keyword">for</span> i <span class="keyword">in</span> range(<span class="number">6</span>):</span><br><span class="line">        chk.append(v5.index(password[i]))</span><br><span class="line">    <span class="keyword">for</span> i <span class="keyword">in</span> range(<span class="number">6</span>):</span><br><span class="line">        <span class="keyword">if</span> chk[i]==v9[i]:</span><br><span class="line">            <span class="keyword">return</span> <span class="number">1</span></span><br><span class="line">        <span class="keyword">else</span>:</span><br><span class="line">            <span class="keyword">return</span> <span class="number">0</span></span><br></pre></td></tr></table></figure>
+<p>简而言之就是利用动态生成的v5序列作为字典，先用密码在字典中寻找序号，最终比对v9的序号和密码的序号是否一致。</p>
+<p>最终简单解密为，直接用v9当做序号去输出v6的内容：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">v9 = [<span class="number">5</span>,<span class="number">2</span>,<span class="number">7</span>,<span class="number">2</span>,<span class="number">5</span>,<span class="number">6</span>]</span><br><span class="line">v5 = [<span class="string">'m'</span>,<span class="string">'n'</span>,<span class="string">'o'</span>,<span class="string">'p'</span>,<span class="string">'q'</span>,<span class="string">'r'</span>,<span class="string">'s'</span>,<span class="string">'t'</span>,<span class="string">'u'</span>,<span class="string">'v'</span>,<span class="string">'w'</span>,<span class="string">'x'</span>,<span class="string">'y'</span>,<span class="string">'z'</span>]</span><br><span class="line"><span class="keyword">for</span> i <span class="keyword">in</span> range(<span class="number">6</span>):</span><br><span class="line">    <span class="keyword">print</span> v5[v9[i]]</span><br></pre></td></tr></table></figure>
+<p>答案是<code>rotors</code></p>
+<h3 id="方法二（IDA动态调试）"><a href="#方法二（IDA动态调试）" class="headerlink" title="方法二（IDA动态调试）"></a>方法二（IDA动态调试）</h3><p>IDA动态调试的方法就不具体说了，之前有介绍过，当我们利用IDA调试的时候遇到反调问题，程序会进入之个死循环当中。</p>
+<p><img src="https://ws1.sinaimg.cn/large/006tNbRwly1fycejv0uugj30so0l4aco.jpg" alt=""></p>
+<p>然后暂停程序，可以直接设置EIP指向main函数后再继续运行，这样跳过反调代码。然后在关键的<code>sub_40074D</code>函数中设置了四个断点进行分析，单步调试，如下图所示：</p>
+<p><img src="https://ws4.sinaimg.cn/large/006tNbRwly1fyce4jxaa9j317w0mm7df.jpg" alt=""></p>
+<p>程序的整个流程是①②③④这个顺序进行的，但我们分析程序形成的思路顺序是①④③②。</p>
+<h2 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h2><p>题目简单，对之前的知识进行了回顾练习，提高程序的分析能力。</p>
+
+            
+
+        </div>
+    </div>
+    <div id="post-footer" class="post-footer main-content-wrap">
+        
+            <div class="post-footer-tags">
+                <span class="text-color-light text-small">标签</span><br/>
+                
+    <a class="tag tag--primary tag--small t-link" href="/tags/ida/">ida</a> <a class="tag tag--primary tag--small t-link" href="/tags/reverse/">reverse</a>
+
+            </div>
+        
+        
+        
+    </div>
+</article>
+
+
+
+                <footer id="footer" class="main-content-wrap">
+    <span class="copyrights">
+        Copyrights &copy; 2018 Yuan Shen. All Rights Reserved.
+    </span>
+</footer>
+
+            </div>
+            
+        </div>
+        
+
+
+    
+        
+    
+
+<div id="about">
+    <div id="about-card">
+        <div id="about-btn-close">
+            <i class="fa fa-times"></i>
+        </div>
+        
+            <img id="about-card-picture" src="/assets/images/yuan.jpg" alt="作者的图片"/>
+        
+            <h4 id="about-card-name">Yuan Shen</h4>
+        
+            <div id="about-card-bio"><p>author.bio</p>
+</div>
+        
+        
+            <div id="about-card-job">
+                <i class="fa fa-briefcase"></i>
+                <br/>
+                <p>author.job</p>
+
+            </div>
+        
+        
+    </div>
+</div>
+
+        
+        
+<div id="cover" style="background-image:url('/assets/images/cover.jpg');"></div>
+        <!--SCRIPTS-->
+<script src="/assets/js/script-vufjrm3fmbuttogo1hxuu0w9w0sesk5iyysjuguc2hdhufot9szxg8twijry.min.js"></script>
+<!--SCRIPTS END-->
+
+
+
+    </body>
+</html>
