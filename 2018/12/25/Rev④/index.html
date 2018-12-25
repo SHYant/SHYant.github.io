@@ -1,0 +1,358 @@
+
+<!DOCTYPE html>
+<html lang="zh-cn">
+    
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="generator" content="Ant Park">
+    <title>Rev④ - Ant Park</title>
+    <meta name="author" content="Yuan Shen">
+    
+    
+        <link rel="icon" href="http://yoursite.com/assets/images/yuan.png">
+    
+    
+    <script type="application/ld+json">{"@context":"http://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Yuan Shen","sameAs":[],"image":"yuan.jpg"},"articleBody":"声明：本篇的主要作者 Fish（CCSR小组重要成员之一）\n一道中等难度的Reverse题，由蓝鲸安全平台提供。\n题目：标准的用户名–密码类型。地址：https://pan.baidu.com/s/12FfpVJ81hxaM71fk1qV0zA\n知识点：IDA动态调试\n\n\n题目解析直接运行程序，要求输入用户名和密码：\n\n使用IDA反编译该程序的main函数，结果如下图：\n\n\n第一部分为默认自动输出；\n第二、四部分为干扰程序执行的sleep函数，可以利用IDA动态调试，在循环开始前下断点，然后在循环结束处set IP的方式跳过；\n第三部分获得输入的Username和Password；\n第五部分为破解程序的主要关注点。\n\n函数sub_400C9A该函数通过for循环获得Username的长度，并将长度赋值给i（如果长度大于等于50，则i=50），执行sub_400C41函数。\n\n函数sub_400C41该函数传入的参数为之前输入的Username的长度，如果不符合4个if判别式的要求，则会输出invalid username or password并退出。\n\n可以通过编写C程序来判断什么数满足该条件（测试了0~99）：\n\npython脚本：可知Username的长度必须为8或12。\n123for i in range(100):    if (4 * (i &gt;&gt; 2) == i and 4 * (i &gt;&gt; 4) != i &gt;&gt; 2 and  (i&gt;&gt;3) and not (i&gt;&gt;4)):        print i\n此外，也可以直接分析该判别式：\n\n第四个条件可知a1长度不能超过4位，在1000~1111之间；\n第一个条件可知a1后两位为00，a1位双数，且是4的倍数；\n第二个条件可知a1的前两位不能全为0，a1起码大于3；\n第三个条件可知a1的最高位为1；\n所以，a1只能为1000或1100，也即Username的长度必须为8或12。\n\n函数sub_400CDD\n通过动态调试的方法，可以看出:\n\n当Username为8位时，v4对应其高4位，v3对应其低4位，v2为0；\n当Username为12位时，v4对应其高4位，v3对应其中4位，v2为其低4位;\n其原因是已经按照每4位进行了赋值。\n\n\n然后通过列方程的方式解出v4、v3、v2的值：\n\nv4-v3+v2=1550207830\nv3+3*(v2+v4)=12465522610\nv2*v3=3651346623716053780\n\n②-3*①即可得到v3的值，带入③得到v2的值，代回①得到v4：\n\nV4=1635017059，即0x61746163，对应ascii码为atac\n\nV3=1953724780，即0x7473796C，对应ascii码为tsyl\n\nV2=1868915551，即0x6F65635F，对应ascii码为oec_\n\n因为是小端序，所以Username为catalyst_ceo。\n\n\n函数sub_4008F7这个函数比较简单：如果Username出现了既非_，又非小写英文字母的字符，则报错并停止运行。实际上，如果上个函数已经求出了Username，这个函数就起不到限制效果。\n\n函数sub_400977这个函数比较长，但后面部分只是简单的重复，所以这里只分析前面部分：\n\n\n通过计算for循环的限制条件，可知password每位的ascii码必须位于（47，57]或（64,90]或（96,122]，查ascii码表可知password为数字或大小写字母；\n\nSrand()函数生成随机数种子，通过分析可知，随机种子是根据Username生成的；\n\nRand()函数生成一个随机数，但由于之前srand()函数已指定了随机数种子，所以每次执行时，生成的随机数是一样的，可以通过IDA动态调试的方法得到十个随机数的值，从而算出v2~v11（v2到v11从高到低各对应password的4位），得到password；\n\n\n右上角的RAX保存的即是rand()得到的随机数0x684749，与后面比较时用到的0x55EB052A相加，就得到了password的前四个字母0x56534C73，也即VSLs（因为小端序，所以password开头四个字母实际为sLSV）。\n\n后面部分原理与此相同（相加结果如果溢出，移除最高位即可），最终得到password为：sLSVpQ4vK3cGWyW86AiZhggwLHBjmx9CRspVGggj。\n\n\n1234567891011121314151617181920212223#usernameuserin = [1635017059,1953724780,1868915551]username = ''for i in userin:    username+=i.to_bytes(4,'little').decode('utf-8')print(username)#passwordpassin = [1441465642,251096121,3424529764,          3350644469,647240698,638382323,          282381039,3328632868,4236854684,          605226810]randp = [0x684749,0x673CE537,0x7B4505E7,         0x70A0B262,0x33D5253C,0x515A7675,         0x596D7D5D,0x7CD29049,0x59E72DB6,         0x4654600D]password = ''for i in range(len(randp)):    s = passin[i] +randp[i]    s %= 0x100000000    password += s.to_bytes(4,'little').decode('utf-8')print(password)\n函数sub_400876\n该函数用于输出最后的flag。输入正确的Username和password后，即可得到flag。\n\n总结这道题整体分析下来并不难，只是看着复杂些而已，在调试过程中需要绕过一些sleep()函数，其他的就是需要耐心调试了。\n小组成员Fish，第一次写writeup，大家多多鼓励。\n","dateCreated":"2018-12-25T23:12:23+08:00","dateModified":"2018-12-26T00:24:44+08:00","datePublished":"2018-12-25T23:12:23+08:00","description":"声明：本篇的主要作者 Fish（CCSR小组重要成员之一）\n一道中等难度的Reverse题，由蓝鲸安全平台提供。\n题目：标准的用户名–密码类型。地址：https://pan.baidu.com/s/12FfpVJ81hxaM71fk1qV0zA\n知识点：IDA动态调试","headline":"Rev④","image":["https://ws2.sinaimg.cn/large/0069RVTdly1fv9d6x9yhjj30o60iqau7.jpg","https://ws3.sinaimg.cn/large/0069RVTdly1fv9d1artqxj31kw1z4kjp.jpg"],"mainEntityOfPage":{"@type":"WebPage","@id":"http://yoursite.com/2018/12/25/Rev④/"},"publisher":{"@type":"Organization","name":"Yuan Shen","sameAs":[],"image":"yuan.jpg","logo":{"@type":"ImageObject","url":"yuan.jpg"}},"url":"http://yoursite.com/2018/12/25/Rev④/","keywords":"reverse, ida","thumbnailUrl":"https://ws2.sinaimg.cn/large/0069RVTdly1fv9d6x9yhjj30o60iqau7.jpg"}</script>
+    <meta name="description" content="声明：本篇的主要作者 Fish（CCSR小组重要成员之一） 一道中等难度的Reverse题，由蓝鲸安全平台提供。 题目：标准的用户名–密码类型。地址：https://pan.baidu.com/s/12FfpVJ81hxaM71fk1qV0zA 知识点：IDA动态调试">
+<meta name="keywords" content="reverse,ida">
+<meta property="og:type" content="blog">
+<meta property="og:title" content="Rev④">
+<meta property="og:url" content="http://yoursite.com/2018/12/25/Rev④/index.html">
+<meta property="og:site_name" content="Ant Park">
+<meta property="og:description" content="声明：本篇的主要作者 Fish（CCSR小组重要成员之一） 一道中等难度的Reverse题，由蓝鲸安全平台提供。 题目：标准的用户名–密码类型。地址：https://pan.baidu.com/s/12FfpVJ81hxaM71fk1qV0zA 知识点：IDA动态调试">
+<meta property="og:locale" content="zh-cn">
+<meta property="og:image" content="https://ws2.sinaimg.cn/large/006tNbRwly1fyjeqh4gcsj30xi0bo42k.jpg">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/006tNbRwly1fyjes4xn42j30gk0to41o.jpg">
+<meta property="og:image" content="https://ws4.sinaimg.cn/large/006tNbRwly1fyjeuynzyjj30fg05umxj.jpg">
+<meta property="og:image" content="https://ws4.sinaimg.cn/large/006tNbRwly1fyjexvqh88j30n204it92.jpg">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/006tNbRwly1fyjf2m42z0j30mo0e2ta7.jpg">
+<meta property="og:image" content="https://ws3.sinaimg.cn/large/006tNbRwly1fyjfcclsp7j30m20c6q48.jpg">
+<meta property="og:image" content="https://ws3.sinaimg.cn/large/006tNbRwly1fyjfok2ma6j30aa0iotck.jpg">
+<meta property="og:image" content="https://ws2.sinaimg.cn/large/006tNbRwly1fyjfryz3quj30mk09e750.jpg">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/006tNbRwly1fyjftcuyeoj30ia09udgs.jpg">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/006tNbRwly1fyjfx1qa9qj30n204kdgk.jpg">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/006tNbRwly1fyjfzmv8qkj30e8060dgf.jpg">
+<meta property="og:image" content="https://ws3.sinaimg.cn/large/006tNbRwly1fyjfzz743lj30l603uaao.jpg">
+<meta property="og:updated_time" content="2018-12-25T16:24:44.845Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Rev④">
+<meta name="twitter:description" content="声明：本篇的主要作者 Fish（CCSR小组重要成员之一） 一道中等难度的Reverse题，由蓝鲸安全平台提供。 题目：标准的用户名–密码类型。地址：https://pan.baidu.com/s/12FfpVJ81hxaM71fk1qV0zA 知识点：IDA动态调试">
+<meta name="twitter:image" content="https://ws2.sinaimg.cn/large/006tNbRwly1fyjeqh4gcsj30xi0bo42k.jpg">
+    
+    
+        
+    
+    
+        <meta property="og:image" content="http://yoursite.com/assets/images/yuan.jpg"/>
+    
+    
+        <meta property="og:image" content="https://ws2.sinaimg.cn/large/0069RVTdly1fv9d6x9yhjj30o60iqau7.jpg"/>
+        <meta class="swiftype" name="image" data-type="enum" content="https://ws2.sinaimg.cn/large/0069RVTdly1fv9d6x9yhjj30o60iqau7.jpg" />
+    
+    
+        <meta property="og:image" content="https://ws3.sinaimg.cn/large/0069RVTdly1fv9d1artqxj31kw1z4kjp.jpg"/>
+        <meta class="swiftype" name="image" data-type="enum" content="https://ws3.sinaimg.cn/large/0069RVTdly1fv9d1artqxj31kw1z4kjp.jpg" />
+    
+    
+    <!--STYLES-->
+    <link rel="stylesheet" href="/assets/css/style-du2xmrqdqrl2ollgeiw050kpl6l4nbyz7bumjuurjgsxyopifvukebxc9lqe.min.css">
+    <!--STYLES END-->
+    
+
+    
+</head>
+
+    <body>
+        <div id="blog">
+            <!-- Define author's picture -->
+
+
+    
+        
+            
+        
+    
+
+<header id="header" data-behavior="4">
+    <i id="btn-open-sidebar" class="fa fa-lg fa-bars"></i>
+    <div class="header-title">
+        <a class="header-title-link" href="/ ">Ant Park</a>
+    </div>
+    
+        
+            <a  class="header-right-picture "
+                href="#about">
+        
+        
+            <img class="header-picture" src="/assets/images/yuan.jpg" alt="作者的图片"/>
+        
+        </a>
+    
+</header>
+
+            <!-- Define author's picture -->
+
+
+
+        
+    
+
+<nav id="sidebar" data-behavior="4">
+    <div class="sidebar-container">
+        
+            <div class="sidebar-profile">
+                <a href="/#about">
+                    <img class="sidebar-profile-picture" src="/assets/images/yuan.jpg" alt="作者的图片"/>
+                </a>
+                <h4 class="sidebar-profile-name">Yuan Shen</h4>
+                
+                    <h5 class="sidebar-profile-bio"><p>author.bio</p>
+</h5>
+                
+            </div>
+        
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/ "
+                            
+                            title="首页"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-home" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">首页</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-categories"
+                            
+                            title="分类"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-bookmark" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">分类</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-tags"
+                            
+                            title="标签"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-tags" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">标签</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-archives"
+                            
+                            title="归档"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-archive" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">归档</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+    </div>
+</nav>
+
+            
+        <div class="post-header-cover
+                    text-center
+                    post-header-cover--full"
+             style="background-image:url('https://ws3.sinaimg.cn/large/0069RVTdly1fv9d1artqxj31kw1z4kjp.jpg');"
+             data-behavior="4">
+            
+        </div>
+
+            <div id="main" data-behavior="4"
+                 class="hasCover
+                        hasCoverMetaOut
+                        hasCoverCaption">
+                
+<article class="post">
+    
+        <span class="post-header-cover-caption caption">Lonely</span>
+    
+    
+        <div class="post-header main-content-wrap text-center">
+    
+        <h1 class="post-title">
+            Rev④
+        </h1>
+    
+    
+</div>
+
+    
+    <div class="post-content markdown">
+        <div class="main-content-wrap">
+            <p>声明：本篇的主要作者 Fish（CCSR小组重要成员之一）</p>
+<p>一道中等难度的Reverse题，由蓝鲸安全平台提供。</p>
+<p>题目：标准的用户名–密码类型。地址：<a href="https://pan.baidu.com/s/12FfpVJ81hxaM71fk1qV0zA" target="_blank" rel="noopener">https://pan.baidu.com/s/12FfpVJ81hxaM71fk1qV0zA</a></p>
+<p>知识点：IDA动态调试</p>
+<a id="more"></a>
+<h1 id="table-of-contents">目录</h1><ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#题目解析"><span class="toc-text">题目解析</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#函数sub-400C9A"><span class="toc-text">函数sub_400C9A</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#函数sub-400C41"><span class="toc-text">函数sub_400C41</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#函数sub-400CDD"><span class="toc-text">函数sub_400CDD</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#函数sub-4008F7"><span class="toc-text">函数sub_4008F7</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#函数sub-400977"><span class="toc-text">函数sub_400977</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#函数sub-400876"><span class="toc-text">函数sub_400876</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#总结"><span class="toc-text">总结</span></a></li></ol>
+<h2 id="题目解析"><a href="#题目解析" class="headerlink" title="题目解析"></a>题目解析</h2><p>直接运行程序，要求输入用户名和密码：</p>
+<p><img src="https://ws2.sinaimg.cn/large/006tNbRwly1fyjeqh4gcsj30xi0bo42k.jpg" alt=""></p>
+<p>使用IDA反编译该程序的main函数，结果如下图：</p>
+<p><img src="https://ws1.sinaimg.cn/large/006tNbRwly1fyjes4xn42j30gk0to41o.jpg" alt=""></p>
+<ul>
+<li>第一部分为默认自动输出；</li>
+<li>第二、四部分为干扰程序执行的sleep函数，可以利用IDA动态调试，在循环开始前下断点，然后在循环结束处set IP的方式跳过；</li>
+<li>第三部分获得输入的Username和Password；</li>
+<li>第五部分为破解程序的主要关注点。</li>
+</ul>
+<h3 id="函数sub-400C9A"><a href="#函数sub-400C9A" class="headerlink" title="函数sub_400C9A"></a>函数<code>sub_400C9A</code></h3><p>该函数通过for循环获得Username的长度，并将长度赋值给i（如果长度大于等于50，则i=50），执行<code>sub_400C41</code>函数。</p>
+<p><img src="https://ws4.sinaimg.cn/large/006tNbRwly1fyjeuynzyjj30fg05umxj.jpg" alt=""></p>
+<h3 id="函数sub-400C41"><a href="#函数sub-400C41" class="headerlink" title="函数sub_400C41"></a>函数<code>sub_400C41</code></h3><p>该函数传入的参数为之前输入的<code>Username</code>的长度，如果不符合4个if判别式的要求，则会输出<code>invalid username or password</code>并退出。</p>
+<p><img src="https://ws4.sinaimg.cn/large/006tNbRwly1fyjexvqh88j30n204it92.jpg" alt=""></p>
+<p>可以通过编写C程序来判断什么数满足该条件（测试了0~99）：</p>
+<p><img src="https://ws1.sinaimg.cn/large/006tNbRwly1fyjf2m42z0j30mo0e2ta7.jpg" alt=""></p>
+<p>python脚本：可知Username的长度必须为8或12。</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">for</span> i <span class="keyword">in</span> range(<span class="number">100</span>):</span><br><span class="line">    <span class="keyword">if</span> (<span class="number">4</span> * (i &gt;&gt; <span class="number">2</span>) == i <span class="keyword">and</span> <span class="number">4</span> * (i &gt;&gt; <span class="number">4</span>) != i &gt;&gt; <span class="number">2</span> <span class="keyword">and</span>  (i&gt;&gt;<span class="number">3</span>) <span class="keyword">and</span> <span class="keyword">not</span> (i&gt;&gt;<span class="number">4</span>)):</span><br><span class="line">        <span class="keyword">print</span> i</span><br></pre></td></tr></table></figure>
+<p>此外，也可以直接分析该判别式：</p>
+<ul>
+<li>第四个条件可知a1长度不能超过4位，在1000~1111之间；</li>
+<li>第一个条件可知a1后两位为00，a1位双数，且是4的倍数；</li>
+<li>第二个条件可知a1的前两位不能全为0，a1起码大于3；</li>
+<li>第三个条件可知a1的最高位为1；</li>
+<li>所以，a1只能为1000或1100，也即Username的长度必须为8或12。</li>
+</ul>
+<h3 id="函数sub-400CDD"><a href="#函数sub-400CDD" class="headerlink" title="函数sub_400CDD"></a>函数<code>sub_400CDD</code></h3><p><img src="https://ws3.sinaimg.cn/large/006tNbRwly1fyjfcclsp7j30m20c6q48.jpg" alt=""></p>
+<p>通过动态调试的方法，可以看出:</p>
+<ul>
+<li>当Username为8位时，v4对应其高4位，v3对应其低4位，v2为0；</li>
+<li>当Username为12位时，v4对应其高4位，v3对应其中4位，v2为其低4位;</li>
+<li>其原因是已经按照每4位进行了赋值。</li>
+</ul>
+<p><img src="https://ws3.sinaimg.cn/large/006tNbRwly1fyjfok2ma6j30aa0iotck.jpg" alt=""></p>
+<p>然后通过列方程的方式解出<code>v4、v3、v2</code>的值：</p>
+<ul>
+<li><code>v4-v3+v2=1550207830</code></li>
+<li><code>v3+3*(v2+v4)=12465522610</code></li>
+<li><code>v2*v3=3651346623716053780</code></li>
+</ul>
+<p>②-3*①即可得到v3的值，带入③得到v2的值，代回①得到v4：</p>
+<ul>
+<li><p>V4=1635017059，即0x61746163，对应ascii码为atac</p>
+</li>
+<li><p>V3=1953724780，即0x7473796C，对应ascii码为tsyl</p>
+</li>
+<li><p>V2=1868915551，即0x6F65635F，对应ascii码为oec_</p>
+</li>
+<li><p>因为是小端序，所以Username为catalyst_ceo。</p>
+</li>
+</ul>
+<h3 id="函数sub-4008F7"><a href="#函数sub-4008F7" class="headerlink" title="函数sub_4008F7"></a>函数<code>sub_4008F7</code></h3><p>这个函数比较简单：如果Username出现了既非<code>_</code>，又非小写英文字母的字符，则报错并停止运行。实际上，如果上个函数已经求出了Username，这个函数就起不到限制效果。</p>
+<p><img src="https://ws2.sinaimg.cn/large/006tNbRwly1fyjfryz3quj30mk09e750.jpg" alt=""></p>
+<h3 id="函数sub-400977"><a href="#函数sub-400977" class="headerlink" title="函数sub_400977"></a>函数<code>sub_400977</code></h3><p>这个函数比较长，但后面部分只是简单的重复，所以这里只分析前面部分：</p>
+<p><img src="https://ws1.sinaimg.cn/large/006tNbRwly1fyjftcuyeoj30ia09udgs.jpg" alt=""></p>
+<ul>
+<li><p>通过计算for循环的限制条件，可知password每位的ascii码必须位于<code>（47，57]</code>或<code>（64,90]</code>或<code>（96,122]</code>，查ascii码表可知password为数字或大小写字母；</p>
+</li>
+<li><p><code>Srand()</code>函数生成随机数种子，通过分析可知，随机种子是根据Username生成的；</p>
+</li>
+<li><p><code>Rand()</code>函数生成一个随机数，但由于之前srand()函数已指定了随机数种子，所以每次执行时，生成的随机数是一样的，可以通过IDA动态调试的方法得到十个随机数的值，从而算出<code>v2~v11</code>（v2到v11从高到低各对应password的4位），得到password；</p>
+<p><img src="https://ws1.sinaimg.cn/large/006tNbRwly1fyjfx1qa9qj30n204kdgk.jpg" alt=""></p>
+</li>
+<li><p>右上角的RAX保存的即是rand()得到的随机数<code>0x684749</code>，与后面比较时用到的<code>0x55EB052A</code>相加，就得到了password的前四个字母<code>0x56534C73</code>，也即<code>VSLs</code>（因为小端序，所以password开头四个字母实际为<code>sLSV</code>）。</p>
+</li>
+<li><p>后面部分原理与此相同（相加结果如果溢出，移除最高位即可），最终得到password为：<code>sLSVpQ4vK3cGWyW86AiZhggwLHBjmx9CRspVGggj</code>。</p>
+</li>
+</ul>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">#username</span></span><br><span class="line">userin = [<span class="number">1635017059</span>,<span class="number">1953724780</span>,<span class="number">1868915551</span>]</span><br><span class="line">username = <span class="string">''</span></span><br><span class="line"><span class="keyword">for</span> i <span class="keyword">in</span> userin:</span><br><span class="line">    username+=i.to_bytes(<span class="number">4</span>,<span class="string">'little'</span>).decode(<span class="string">'utf-8'</span>)</span><br><span class="line">print(username)</span><br><span class="line"></span><br><span class="line"><span class="comment">#password</span></span><br><span class="line">passin = [<span class="number">1441465642</span>,<span class="number">251096121</span>,<span class="number">3424529764</span>,</span><br><span class="line">          <span class="number">3350644469</span>,<span class="number">647240698</span>,<span class="number">638382323</span>,</span><br><span class="line">          <span class="number">282381039</span>,<span class="number">3328632868</span>,<span class="number">4236854684</span>,</span><br><span class="line">          <span class="number">605226810</span>]</span><br><span class="line"></span><br><span class="line">randp = [<span class="number">0x684749</span>,<span class="number">0x673CE537</span>,<span class="number">0x7B4505E7</span>,</span><br><span class="line">         <span class="number">0x70A0B262</span>,<span class="number">0x33D5253C</span>,<span class="number">0x515A7675</span>,</span><br><span class="line">         <span class="number">0x596D7D5D</span>,<span class="number">0x7CD29049</span>,<span class="number">0x59E72DB6</span>,</span><br><span class="line">         <span class="number">0x4654600D</span>]</span><br><span class="line">password = <span class="string">''</span></span><br><span class="line"><span class="keyword">for</span> i <span class="keyword">in</span> range(len(randp)):</span><br><span class="line">    s = passin[i] +randp[i]</span><br><span class="line">    s %= <span class="number">0x100000000</span></span><br><span class="line">    password += s.to_bytes(<span class="number">4</span>,<span class="string">'little'</span>).decode(<span class="string">'utf-8'</span>)</span><br><span class="line">print(password)</span><br></pre></td></tr></table></figure>
+<h3 id="函数sub-400876"><a href="#函数sub-400876" class="headerlink" title="函数sub_400876"></a>函数<code>sub_400876</code></h3><p><img src="https://ws1.sinaimg.cn/large/006tNbRwly1fyjfzmv8qkj30e8060dgf.jpg" alt=""></p>
+<p>该函数用于输出最后的flag。输入正确的Username和password后，即可得到flag。</p>
+<p><img src="https://ws3.sinaimg.cn/large/006tNbRwly1fyjfzz743lj30l603uaao.jpg" alt=""></p>
+<h2 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h2><p>这道题整体分析下来并不难，只是看着复杂些而已，在调试过程中需要绕过一些<code>sleep()函数</code>，其他的就是需要耐心调试了。</p>
+<p>小组成员Fish，第一次写writeup，大家多多鼓励。</p>
+
+            
+
+        </div>
+    </div>
+    <div id="post-footer" class="post-footer main-content-wrap">
+        
+            <div class="post-footer-tags">
+                <span class="text-color-light text-small">标签</span><br/>
+                
+    <a class="tag tag--primary tag--small t-link" href="/tags/ida/">ida</a> <a class="tag tag--primary tag--small t-link" href="/tags/reverse/">reverse</a>
+
+            </div>
+        
+        
+        
+    </div>
+</article>
+
+
+
+                <footer id="footer" class="main-content-wrap">
+    <span class="copyrights">
+        Copyrights &copy; 2018 Yuan Shen. All Rights Reserved.
+    </span>
+</footer>
+
+            </div>
+            
+        </div>
+        
+
+
+    
+        
+    
+
+<div id="about">
+    <div id="about-card">
+        <div id="about-btn-close">
+            <i class="fa fa-times"></i>
+        </div>
+        
+            <img id="about-card-picture" src="/assets/images/yuan.jpg" alt="作者的图片"/>
+        
+            <h4 id="about-card-name">Yuan Shen</h4>
+        
+            <div id="about-card-bio"><p>author.bio</p>
+</div>
+        
+        
+            <div id="about-card-job">
+                <i class="fa fa-briefcase"></i>
+                <br/>
+                <p>author.job</p>
+
+            </div>
+        
+        
+    </div>
+</div>
+
+        
+        
+<div id="cover" style="background-image:url('/assets/images/cover.jpg');"></div>
+        <!--SCRIPTS-->
+<script src="/assets/js/script-vufjrm3fmbuttogo1hxuu0w9w0sesk5iyysjuguc2hdhufot9szxg8twijry.min.js"></script>
+<!--SCRIPTS END-->
+
+
+
+    </body>
+</html>
