@@ -1,0 +1,317 @@
+
+<!DOCTYPE html>
+<html lang="zh-cn">
+    
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="generator" content="Ant Park">
+    <title>Rev⑤ - Ant Park</title>
+    <meta name="author" content="Yuan Shen">
+    
+    
+        <link rel="icon" href="http://yoursite.com/assets/images/yuan.png">
+    
+    
+    <script type="application/ld+json">{"@context":"http://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Yuan Shen","sameAs":[],"image":"yuan.jpg"},"articleBody":"一道中等难度的Reverse题，由蓝鲸安全平台提供。\n题目：move! move! 答案格式：ALEXCTF{XXX}   地址：https://pan.baidu.com/s/1Ax3ppUOxVdwpBapugGlXfw\n知识点：upx解压缩，pin—字节写入追踪\n\n\n题目解析使用File命令和DIE查看文件属性：发现是32位可执行程序，并且已经被UPX打包了。\n\n\n于是使用upx解压缩（-d指令），再用DIE查看脱壳成功。\n\n\n然后使用IDA进行分析，发现由于帧栈太大无法反编译，并且发现汇编指令几乎都是mov指令！\n\n搜索发现，这是通过movfuscator工具编写的地址：https://github.com/xoreaxeaxeax/movfuscator。\n然而并没有很好的反编译方法，不过根据http://wiki.yobi.be/wiki/MoVfuscator_Writeup，找到了一些解题思路，并且其中有一个跟踪程序：`tracer.cpp`\n12345678910111213141516171819202122232425262728293031323334353637383940414243444546474849505152535455565758596061626364656667686970717273747576777879#include \"pin.H\"#include &lt;fstream&gt;std::ofstream TraceFile;PIN_LOCK lock;ADDRINT main_begin;ADDRINT main_end;static ADDRINT WriteAddr;static INT32 WriteSize;static VOID RecordWriteAddrSize(ADDRINT addr, INT32 size)&#123;    WriteAddr = addr;    WriteSize = size;&#125;static VOID RecordMemWrite(ADDRINT ip)&#123;    UINT8 memdump[256];    PIN_GetLock(&amp;lock, ip);    PIN_SafeCopy(memdump, (void *)WriteAddr, WriteSize);    if (WriteSize==1)        TraceFile &lt;&lt; static_cast&lt;CHAR&gt;(*memdump);    PIN_ReleaseLock(&amp;lock);&#125;VOID Instruction_cb(INS ins, VOID *v)&#123;    ADDRINT ip = INS_Address(ins);    if ((ip &lt; main_begin) || (ip &gt; main_end))        return;    if (INS_IsMemoryWrite(ins))    &#123;        INS_InsertPredicatedCall(            ins, IPOINT_BEFORE, (AFUNPTR)RecordWriteAddrSize,            IARG_MEMORYWRITE_EA,            IARG_MEMORYWRITE_SIZE,            IARG_END);        if (INS_HasFallThrough(ins))        &#123;            INS_InsertCall(                ins, IPOINT_AFTER, (AFUNPTR)RecordMemWrite,                IARG_INST_PTR,                IARG_END);        &#125;    &#125;&#125;void ImageLoad_cb(IMG Img, void *v)&#123;    PIN_GetLock(&amp;lock, 0);    if(IMG_IsMainExecutable(Img))    &#123;        main_begin = IMG_LowAddress(Img);        main_end = IMG_HighAddress(Img);    &#125;    PIN_ReleaseLock(&amp;lock);&#125;VOID Fini(INT32 code, VOID *v)&#123;    TraceFile.close();&#125;int  main(int argc, char *argv[])&#123;    PIN_InitSymbols();    PIN_Init(argc,argv);    TraceFile.open(\"trace-1byte-writes.bin\");    if(TraceFile == NULL)        return -1;    IMG_AddInstrumentFunction(ImageLoad_cb, 0);    INS_AddInstrumentFunction(Instruction_cb, 0);    PIN_AddFiniFunction(Fini, 0);    PIN_StartProgram();    return 0;&#125;\n方法：可以使用pin进行1字节内存写入，并且编译使用tracer工具进行逐字节的猜测flag。\n\n首先将tracer.cpp文件放到/source/tools/ManualExamples目录下。\n然后使用命令：make obj-ia32/tracer.so TARGET=ia32编译工具。\n接着我们先尝试一个空字节写入程序并查壳命令：(echo &quot;&quot; | ../../../pin -t obj-ia32/tracer.so -- ./move); xxd trace-1byte-writes.bin\n观察输入数据对挑战文件数据的影响\n\n\n\n将flag格式逐个测试，首先是A\n\n\n\n接着是AL\n\n\n\n发现导出的1字节追踪有变化的部分，01010000好像对应了flag不正确的字节，而00000100对应了flag正确的部分。\n所以可以创建这样一个脚本利用tracer工具追踪爆破获取flag\n\n123456789101112131415161718192021222324252627from string import ascii_lowercase, digitsimport osallChars = digits + '_&#125;' + ascii_lowercaseflag = 'ALEXCTF&#123;'wrong = '\\x01\\x01\\x00\\x00'right = '\\x00\\x00\\x01\\x00'case = '\\x00\\x00\\x00\\x00'def tryFlag(f):    os.system('(echo \"&#123;&#125;\" | ../../../pin -t obj-ia32/tracer.so -- ./move) &gt; /dev/null'.format(f))    data = open('trace-1byte-writes.bin', 'rb').read()    offset = len(f) * 4    return data[offset - 4:offset]while flag[:-1] != '&#125;':    for c in allChars:        result = tryFlag(flag + c)        if result == case:            c = c.upper()            result = tryFlag(flag + c)                    if result == right:            flag += c            print flag            break\n\n经过一段时间的爆破获取了flag：ALEXCTF{M0Vfusc4t0r_w0rk5_l1ke_m4g1c}\n\n\n总结通过这道题，我们学会了以movfuscator混淆程序的由来以及如何追踪破解，并且初次接触PIN针工具。\n","dateCreated":"2019-01-03T10:59:26+08:00","dateModified":"2019-01-09T22:21:42+08:00","datePublished":"2019-01-03T10:59:26+08:00","description":"一道中等难度的Reverse题，由蓝鲸安全平台提供。\n题目：move! move! 答案格式：ALEXCTF{XXX}   地址：https://pan.baidu.com/s/1Ax3ppUOxVdwpBapugGlXfw\n知识点：upx解压缩，pin—字节写入追踪","headline":"Rev⑤","image":["https://ws2.sinaimg.cn/large/0069RVTdly1fv9d6x9yhjj30o60iqau7.jpg","https://ws3.sinaimg.cn/large/0069RVTdly1fv9d1artqxj31kw1z4kjp.jpg"],"mainEntityOfPage":{"@type":"WebPage","@id":"http://yoursite.com/2019/01/03/Rev⑤/"},"publisher":{"@type":"Organization","name":"Yuan Shen","sameAs":[],"image":"yuan.jpg","logo":{"@type":"ImageObject","url":"yuan.jpg"}},"url":"http://yoursite.com/2019/01/03/Rev⑤/","keywords":"reverse, ida, upx, pin","thumbnailUrl":"https://ws2.sinaimg.cn/large/0069RVTdly1fv9d6x9yhjj30o60iqau7.jpg"}</script>
+    <meta name="description" content="一道中等难度的Reverse题，由蓝鲸安全平台提供。 题目：move! move! 答案格式：ALEXCTF{XXX}   地址：https://pan.baidu.com/s/1Ax3ppUOxVdwpBapugGlXfw 知识点：upx解压缩，pin—字节写入追踪">
+<meta name="keywords" content="reverse,ida,upx,pin">
+<meta property="og:type" content="blog">
+<meta property="og:title" content="Rev⑤">
+<meta property="og:url" content="http://yoursite.com/2019/01/03/Rev⑤/index.html">
+<meta property="og:site_name" content="Ant Park">
+<meta property="og:description" content="一道中等难度的Reverse题，由蓝鲸安全平台提供。 题目：move! move! 答案格式：ALEXCTF{XXX}   地址：https://pan.baidu.com/s/1Ax3ppUOxVdwpBapugGlXfw 知识点：upx解压缩，pin—字节写入追踪">
+<meta property="og:locale" content="zh-cn">
+<meta property="og:image" content="https://ws4.sinaimg.cn/large/006tNc79ly1fyt837s1nxj30uy02wmxj.jpg">
+<meta property="og:image" content="https://ws4.sinaimg.cn/large/006tNc79gy1fyt8marf3fj30xw0jin07.jpg">
+<meta property="og:image" content="https://ws2.sinaimg.cn/large/006tNc79gy1fyt8ulc9kqj312u09s7ed.jpg">
+<meta property="og:image" content="https://ws3.sinaimg.cn/large/006tNc79gy1fyt8vvw583j30xy0jwq6e.jpg">
+<meta property="og:image" content="https://ws3.sinaimg.cn/large/006tNc79gy1fytdxhuv47j31g40se7h1.jpg">
+<meta property="og:image" content="https://ws3.sinaimg.cn/large/006tNc79ly1fytpi0dfh5j30qo090tnq.jpg">
+<meta property="og:image" content="https://ws2.sinaimg.cn/large/006tNc79ly1fytpj2wws3j30wu0b2x09.jpg">
+<meta property="og:image" content="https://ws2.sinaimg.cn/large/006tNc79ly1fytpjmo499j30qu08wap3.jpg">
+<meta property="og:image" content="https://ws4.sinaimg.cn/large/006tNc79ly1fytpnn7m2ej30ni03wtbi.jpg">
+<meta property="og:updated_time" content="2019-01-09T14:21:42.399Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Rev⑤">
+<meta name="twitter:description" content="一道中等难度的Reverse题，由蓝鲸安全平台提供。 题目：move! move! 答案格式：ALEXCTF{XXX}   地址：https://pan.baidu.com/s/1Ax3ppUOxVdwpBapugGlXfw 知识点：upx解压缩，pin—字节写入追踪">
+<meta name="twitter:image" content="https://ws4.sinaimg.cn/large/006tNc79ly1fyt837s1nxj30uy02wmxj.jpg">
+    
+    
+        
+    
+    
+        <meta property="og:image" content="http://yoursite.com/assets/images/yuan.jpg"/>
+    
+    
+        <meta property="og:image" content="https://ws2.sinaimg.cn/large/0069RVTdly1fv9d6x9yhjj30o60iqau7.jpg"/>
+        <meta class="swiftype" name="image" data-type="enum" content="https://ws2.sinaimg.cn/large/0069RVTdly1fv9d6x9yhjj30o60iqau7.jpg" />
+    
+    
+        <meta property="og:image" content="https://ws3.sinaimg.cn/large/0069RVTdly1fv9d1artqxj31kw1z4kjp.jpg"/>
+        <meta class="swiftype" name="image" data-type="enum" content="https://ws3.sinaimg.cn/large/0069RVTdly1fv9d1artqxj31kw1z4kjp.jpg" />
+    
+    
+    <!--STYLES-->
+    <link rel="stylesheet" href="/assets/css/style-du2xmrqdqrl2ollgeiw050kpl6l4nbyz7bumjuurjgsxyopifvukebxc9lqe.min.css">
+    <!--STYLES END-->
+    
+
+    
+</head>
+
+    <body>
+        <div id="blog">
+            <!-- Define author's picture -->
+
+
+    
+        
+            
+        
+    
+
+<header id="header" data-behavior="4">
+    <i id="btn-open-sidebar" class="fa fa-lg fa-bars"></i>
+    <div class="header-title">
+        <a class="header-title-link" href="/ ">Ant Park</a>
+    </div>
+    
+        
+            <a  class="header-right-picture "
+                href="#about">
+        
+        
+            <img class="header-picture" src="/assets/images/yuan.jpg" alt="作者的图片"/>
+        
+        </a>
+    
+</header>
+
+            <!-- Define author's picture -->
+
+
+
+        
+    
+
+<nav id="sidebar" data-behavior="4">
+    <div class="sidebar-container">
+        
+            <div class="sidebar-profile">
+                <a href="/#about">
+                    <img class="sidebar-profile-picture" src="/assets/images/yuan.jpg" alt="作者的图片"/>
+                </a>
+                <h4 class="sidebar-profile-name">Yuan Shen</h4>
+                
+                    <h5 class="sidebar-profile-bio"><p>author.bio</p>
+</h5>
+                
+            </div>
+        
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/ "
+                            
+                            title="首页"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-home" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">首页</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-categories"
+                            
+                            title="分类"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-bookmark" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">分类</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-tags"
+                            
+                            title="标签"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-tags" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">标签</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-archives"
+                            
+                            title="归档"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-archive" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">归档</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+    </div>
+</nav>
+
+            
+        <div class="post-header-cover
+                    text-center
+                    post-header-cover--full"
+             style="background-image:url('https://ws3.sinaimg.cn/large/0069RVTdly1fv9d1artqxj31kw1z4kjp.jpg');"
+             data-behavior="4">
+            
+        </div>
+
+            <div id="main" data-behavior="4"
+                 class="hasCover
+                        hasCoverMetaOut
+                        hasCoverCaption">
+                
+<article class="post">
+    
+        <span class="post-header-cover-caption caption">Lonely</span>
+    
+    
+        <div class="post-header main-content-wrap text-center">
+    
+        <h1 class="post-title">
+            Rev⑤
+        </h1>
+    
+    
+</div>
+
+    
+    <div class="post-content markdown">
+        <div class="main-content-wrap">
+            <p>一道中等难度的Reverse题，由蓝鲸安全平台提供。</p>
+<p>题目：move! move! 答案格式：ALEXCTF{XXX}   地址：<a href="https://pan.baidu.com/s/1Ax3ppUOxVdwpBapugGlXfw" target="_blank" rel="noopener">https://pan.baidu.com/s/1Ax3ppUOxVdwpBapugGlXfw</a></p>
+<p>知识点：upx解压缩，pin—字节写入追踪</p>
+<a id="more"></a>
+<h1 id="table-of-contents">目录</h1><ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#题目解析"><span class="toc-text">题目解析</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#总结"><span class="toc-text">总结</span></a></li></ol>
+<h2 id="题目解析"><a href="#题目解析" class="headerlink" title="题目解析"></a>题目解析</h2><p>使用File命令和DIE查看文件属性：发现是32位可执行程序，并且已经被UPX打包了。</p>
+<p><img src="https://ws4.sinaimg.cn/large/006tNc79ly1fyt837s1nxj30uy02wmxj.jpg" alt=""></p>
+<p><img src="https://ws4.sinaimg.cn/large/006tNc79gy1fyt8marf3fj30xw0jin07.jpg" alt=""></p>
+<p>于是使用upx解压缩（-d指令），再用DIE查看脱壳成功。</p>
+<p><img src="https://ws2.sinaimg.cn/large/006tNc79gy1fyt8ulc9kqj312u09s7ed.jpg" alt=""></p>
+<p><img src="https://ws3.sinaimg.cn/large/006tNc79gy1fyt8vvw583j30xy0jwq6e.jpg" alt=""></p>
+<p>然后使用IDA进行分析，发现由于帧栈太大无法反编译，并且发现汇编指令几乎都是mov指令！</p>
+<p><img src="https://ws3.sinaimg.cn/large/006tNc79gy1fytdxhuv47j31g40se7h1.jpg" alt=""></p>
+<p>搜索发现，这是通过movfuscator工具编写的地址：<a href="https://github.com/xoreaxeaxeax/movfuscator。" target="_blank" rel="noopener">https://github.com/xoreaxeaxeax/movfuscator。</a></p>
+<p>然而并没有很好的反编译方法，不过根据<a href="http://wiki.yobi.be/wiki/MoVfuscator_Writeup，找到了一些解题思路，并且其中有一个跟踪程序：`tracer.cpp`" target="_blank" rel="noopener">http://wiki.yobi.be/wiki/MoVfuscator_Writeup，找到了一些解题思路，并且其中有一个跟踪程序：`tracer.cpp`</a></p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">"pin.H"</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;fstream&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="built_in">std</span>::ofstream TraceFile;</span><br><span class="line">PIN_LOCK lock;</span><br><span class="line">ADDRINT main_begin;</span><br><span class="line">ADDRINT main_end;</span><br><span class="line"></span><br><span class="line"><span class="keyword">static</span> ADDRINT WriteAddr;</span><br><span class="line"><span class="keyword">static</span> INT32 WriteSize;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">static</span> VOID <span class="title">RecordWriteAddrSize</span><span class="params">(ADDRINT addr, INT32 size)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    WriteAddr = addr;</span><br><span class="line">    WriteSize = size;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">static</span> VOID <span class="title">RecordMemWrite</span><span class="params">(ADDRINT ip)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    UINT8 memdump[<span class="number">256</span>];</span><br><span class="line">    PIN_GetLock(&amp;lock, ip);</span><br><span class="line">    PIN_SafeCopy(memdump, (<span class="keyword">void</span> *)WriteAddr, WriteSize);</span><br><span class="line">    <span class="keyword">if</span> (WriteSize==<span class="number">1</span>)</span><br><span class="line">        TraceFile &lt;&lt; <span class="keyword">static_cast</span>&lt;CHAR&gt;(*memdump);</span><br><span class="line">    PIN_ReleaseLock(&amp;lock);</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function">VOID <span class="title">Instruction_cb</span><span class="params">(INS ins, VOID *v)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    ADDRINT ip = INS_Address(ins);</span><br><span class="line">    <span class="keyword">if</span> ((ip &lt; main_begin) || (ip &gt; main_end))</span><br><span class="line">        <span class="keyword">return</span>;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (INS_IsMemoryWrite(ins))</span><br><span class="line">    &#123;</span><br><span class="line">        INS_InsertPredicatedCall(</span><br><span class="line">            ins, IPOINT_BEFORE, (AFUNPTR)RecordWriteAddrSize,</span><br><span class="line">            IARG_MEMORYWRITE_EA,</span><br><span class="line">            IARG_MEMORYWRITE_SIZE,</span><br><span class="line">            IARG_END);</span><br><span class="line">        <span class="keyword">if</span> (INS_HasFallThrough(ins))</span><br><span class="line">        &#123;</span><br><span class="line">            INS_InsertCall(</span><br><span class="line">                ins, IPOINT_AFTER, (AFUNPTR)RecordMemWrite,</span><br><span class="line">                IARG_INST_PTR,</span><br><span class="line">                IARG_END);</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">ImageLoad_cb</span><span class="params">(IMG Img, <span class="keyword">void</span> *v)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    PIN_GetLock(&amp;lock, <span class="number">0</span>);</span><br><span class="line">    <span class="keyword">if</span>(IMG_IsMainExecutable(Img))</span><br><span class="line">    &#123;</span><br><span class="line">        main_begin = IMG_LowAddress(Img);</span><br><span class="line">        main_end = IMG_HighAddress(Img);</span><br><span class="line">    &#125;</span><br><span class="line">    PIN_ReleaseLock(&amp;lock);</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function">VOID <span class="title">Fini</span><span class="params">(INT32 code, VOID *v)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    TraceFile.close();</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span>  <span class="title">main</span><span class="params">(<span class="keyword">int</span> argc, <span class="keyword">char</span> *argv[])</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    PIN_InitSymbols();</span><br><span class="line">    PIN_Init(argc,argv);</span><br><span class="line">    TraceFile.open(<span class="string">"trace-1byte-writes.bin"</span>);</span><br><span class="line">    <span class="keyword">if</span>(TraceFile == <span class="literal">NULL</span>)</span><br><span class="line">        <span class="keyword">return</span> <span class="number">-1</span>;</span><br><span class="line">    IMG_AddInstrumentFunction(ImageLoad_cb, <span class="number">0</span>);</span><br><span class="line">    INS_AddInstrumentFunction(Instruction_cb, <span class="number">0</span>);</span><br><span class="line">    PIN_AddFiniFunction(Fini, <span class="number">0</span>);</span><br><span class="line">    PIN_StartProgram();</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>方法：可以使用pin进行1字节内存写入，并且编译使用tracer工具进行逐字节的猜测flag。</p>
+<ul>
+<li>首先将<code>tracer.cpp</code>文件放到/source/tools/ManualExamples目录下。</li>
+<li>然后使用命令：<code>make obj-ia32/tracer.so TARGET=ia32</code>编译工具。</li>
+<li>接着我们先尝试一个空字节写入程序并查壳命令：<code>(echo &quot;&quot; | ../../../pin -t obj-ia32/tracer.so -- ./move); xxd trace-1byte-writes.bin</code></li>
+<li>观察输入数据对挑战文件数据的影响</li>
+</ul>
+<p><img src="https://ws3.sinaimg.cn/large/006tNc79ly1fytpi0dfh5j30qo090tnq.jpg" alt=""></p>
+<ul>
+<li>将flag格式逐个测试，首先是A</li>
+</ul>
+<p><img src="https://ws2.sinaimg.cn/large/006tNc79ly1fytpj2wws3j30wu0b2x09.jpg" alt=""></p>
+<ul>
+<li>接着是AL</li>
+</ul>
+<p><img src="https://ws2.sinaimg.cn/large/006tNc79ly1fytpjmo499j30qu08wap3.jpg" alt=""></p>
+<ul>
+<li>发现导出的1字节追踪有变化的部分，<code>01010000</code>好像对应了flag不正确的字节，而<code>00000100</code>对应了flag正确的部分。</li>
+<li>所以可以创建这样一个脚本利用tracer工具追踪爆破获取flag</li>
+</ul>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">from</span> string <span class="keyword">import</span> ascii_lowercase, digits</span><br><span class="line"><span class="keyword">import</span> os</span><br><span class="line"></span><br><span class="line">allChars = digits + <span class="string">'_&#125;'</span> + ascii_lowercase</span><br><span class="line"></span><br><span class="line">flag = <span class="string">'ALEXCTF&#123;'</span></span><br><span class="line">wrong = <span class="string">'\x01\x01\x00\x00'</span></span><br><span class="line">right = <span class="string">'\x00\x00\x01\x00'</span></span><br><span class="line">case = <span class="string">'\x00\x00\x00\x00'</span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">tryFlag</span><span class="params">(f)</span>:</span></span><br><span class="line">    os.system(<span class="string">'(echo "&#123;&#125;" | ../../../pin -t obj-ia32/tracer.so -- ./move) &gt; /dev/null'</span>.format(f))</span><br><span class="line">    data = open(<span class="string">'trace-1byte-writes.bin'</span>, <span class="string">'rb'</span>).read()</span><br><span class="line">    offset = len(f) * <span class="number">4</span></span><br><span class="line">    <span class="keyword">return</span> data[offset - <span class="number">4</span>:offset]</span><br><span class="line"></span><br><span class="line"><span class="keyword">while</span> flag[:<span class="number">-1</span>] != <span class="string">'&#125;'</span>:</span><br><span class="line">    <span class="keyword">for</span> c <span class="keyword">in</span> allChars:</span><br><span class="line">        result = tryFlag(flag + c)</span><br><span class="line">        <span class="keyword">if</span> result == case:</span><br><span class="line">            c = c.upper()</span><br><span class="line">            result = tryFlag(flag + c)</span><br><span class="line">            </span><br><span class="line">        <span class="keyword">if</span> result == right:</span><br><span class="line">            flag += c</span><br><span class="line">            <span class="keyword">print</span> flag</span><br><span class="line">            <span class="keyword">break</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>经过一段时间的爆破获取了flag：ALEXCTF{M0Vfusc4t0r_w0rk5_l1ke_m4g1c}</li>
+</ul>
+<p><img src="https://ws4.sinaimg.cn/large/006tNc79ly1fytpnn7m2ej30ni03wtbi.jpg" alt=""></p>
+<h2 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h2><p>通过这道题，我们学会了以movfuscator混淆程序的由来以及如何追踪破解，并且初次接触PIN针工具。</p>
+
+            
+
+        </div>
+    </div>
+    <div id="post-footer" class="post-footer main-content-wrap">
+        
+            <div class="post-footer-tags">
+                <span class="text-color-light text-small">标签</span><br/>
+                
+    <a class="tag tag--primary tag--small t-link" href="/tags/ida/">ida</a> <a class="tag tag--primary tag--small t-link" href="/tags/pin/">pin</a> <a class="tag tag--primary tag--small t-link" href="/tags/reverse/">reverse</a> <a class="tag tag--primary tag--small t-link" href="/tags/upx/">upx</a>
+
+            </div>
+        
+        
+        
+    </div>
+</article>
+
+
+
+                <footer id="footer" class="main-content-wrap">
+    <span class="copyrights">
+        Copyrights &copy; 2019 Yuan Shen. All Rights Reserved.
+    </span>
+</footer>
+
+            </div>
+            
+        </div>
+        
+
+
+    
+        
+    
+
+<div id="about">
+    <div id="about-card">
+        <div id="about-btn-close">
+            <i class="fa fa-times"></i>
+        </div>
+        
+            <img id="about-card-picture" src="/assets/images/yuan.jpg" alt="作者的图片"/>
+        
+            <h4 id="about-card-name">Yuan Shen</h4>
+        
+            <div id="about-card-bio"><p>author.bio</p>
+</div>
+        
+        
+            <div id="about-card-job">
+                <i class="fa fa-briefcase"></i>
+                <br/>
+                <p>author.job</p>
+
+            </div>
+        
+        
+    </div>
+</div>
+
+        
+        
+<div id="cover" style="background-image:url('/assets/images/cover.jpg');"></div>
+        <!--SCRIPTS-->
+<script src="/assets/js/script-vufjrm3fmbuttogo1hxuu0w9w0sesk5iyysjuguc2hdhufot9szxg8twijry.min.js"></script>
+<!--SCRIPTS END-->
+
+
+
+    </body>
+</html>
