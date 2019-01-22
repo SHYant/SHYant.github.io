@@ -1,0 +1,335 @@
+
+<!DOCTYPE html>
+<html lang="zh-cn">
+    
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="generator" content="Ant Park">
+    <title>Rev⑥ - Ant Park</title>
+    <meta name="author" content="Yuan Shen">
+    
+    
+        <link rel="icon" href="http://yoursite.com/assets/images/yuan.png">
+    
+    
+    <script type="application/ld+json">{"@context":"http://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Yuan Shen","sameAs":[],"image":"yuan.jpg"},"articleBody":"声明：本篇的作者 Esc1234（CCSR小组重要成员之一）\n题目地址：https://pan.baidu.com/s/11FgG1ymTvcCwB_G7VH9KqA\n知识点：android逆向\n\n\n题目解析\n在夜神模拟器中安装程序，打开后界面如下，app名字为LoopAndLoop，输入密码获得flag；\n\n\n\n使用jeb打开apk文件，找到核心代码，如下图所示\n\n\n\nif语句中的判断条件为MainActivity.this.check(v1, 99) == 1835996258，找到check函数；\n\n\n\n发现返回结果为chec函数，找到chec函数，发现chec函数为调用的so文件中的函数；\n\n\n\n\n在Libraries/armeabi中找到liblhm.so文件并提取出来\n\n\n\n使用IDA打开该so文件，找到chec函数，反编译结果如下\n\n\n\n发现该函数中调用了函数check1，check2，check3，回到jeb中查看MainActivity发现check1，check2，check3中也调用了chec函数，印证了该app的名字LoopAndLoop，决定调用一下该so文件中的函数。\n\n首先搭建NDK环境，网上有教程，此处不在赘述，使用Android Studio新建一个Android项目，在app/src/main/下新建文件夹libs/armeabi/，然后将liblhm.so复制到该路径下，在build.gradle文件中添加如下代码\n\n\n\n\nMainActivity中添加代码如下\n\n1234567891011121314151617181920212223242526272829303132333435363738394041424344454647484950515253545556static &#123;    System.loadLibrary(\"lhm\");&#125;public MainActivity() &#123;    super();&#125;public native int chec(int arg1, int arg2);public int check(int arg2, int arg3) &#123;    return this.chec(arg2, arg3);&#125;public int check1(int arg4, int arg5) &#123;    int v1 = arg4;    int v0;    for(v0 = 1; v0 &lt; 100; ++v0) &#123;        v1 += v0;    &#125;    return this.chec(v1, arg5);&#125;public int check2(int arg5, int arg6) &#123;    int v2;    int v3 = 1000;    int v1 = arg5;    if(arg6 % 2 == 0) &#123;        int v0;        for(v0 = 1; v0 &lt; v3; ++v0) &#123;            v1 += v0;        &#125;        v2 = this.chec(v1, arg6);    &#125;    else &#123;        for(int v0 = 1; v0 &lt; v3; ++v0) &#123;            v1 -= v0;        &#125;        v2 = this.chec(v1, arg6);    &#125;    return v2;&#125;public int check3(int arg4, int arg5) &#123;    int v1 = arg4;    int v0;    for(v0 = 1; v0 &lt; 10000; ++v0) &#123;        v1 += v0;    &#125;    return this.chec(v1, arg5);&#125;\n\n在onCreate函数中调用chec函数\n\n\n\n输出结果为：\n\n\n\n猜测chec函数返回结果为为将1599503850加上第一个参数的值，那么密码为1835996258-1599503850=236492408，输入app中验证，获得flag如下:\n\n\n\n当然也可以用爆破获得密码，只不过用时较长。\n\n\n","dateCreated":"2019-01-22T15:22:00+08:00","dateModified":"2019-01-22T15:46:35+08:00","datePublished":"2019-01-22T15:22:00+08:00","description":"声明：本篇的作者 Esc1234（CCSR小组重要成员之一）\n题目地址：https://pan.baidu.com/s/11FgG1ymTvcCwB_G7VH9KqA\n知识点：android逆向","headline":"Rev⑥","image":["https://ws2.sinaimg.cn/large/0069RVTdly1fv9d6x9yhjj30o60iqau7.jpg","https://ws3.sinaimg.cn/large/0069RVTdly1fv9d1artqxj31kw1z4kjp.jpg"],"mainEntityOfPage":{"@type":"WebPage","@id":"http://yoursite.com/2019/01/22/Rev⑥/"},"publisher":{"@type":"Organization","name":"Yuan Shen","sameAs":[],"image":"yuan.jpg","logo":{"@type":"ImageObject","url":"yuan.jpg"}},"url":"http://yoursite.com/2019/01/22/Rev⑥/","keywords":"android, reverse, jeb","thumbnailUrl":"https://ws2.sinaimg.cn/large/0069RVTdly1fv9d6x9yhjj30o60iqau7.jpg"}</script>
+    <meta name="description" content="声明：本篇的作者 Esc1234（CCSR小组重要成员之一） 题目地址：https://pan.baidu.com/s/11FgG1ymTvcCwB_G7VH9KqA 知识点：android逆向">
+<meta name="keywords" content="android,reverse,jeb">
+<meta property="og:type" content="blog">
+<meta property="og:title" content="Rev⑥">
+<meta property="og:url" content="http://yoursite.com/2019/01/22/Rev⑥/index.html">
+<meta property="og:site_name" content="Ant Park">
+<meta property="og:description" content="声明：本篇的作者 Esc1234（CCSR小组重要成员之一） 题目地址：https://pan.baidu.com/s/11FgG1ymTvcCwB_G7VH9KqA 知识点：android逆向">
+<meta property="og:locale" content="zh-cn">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/006tNc79ly1fzfedspvopj30n20c8772.jpg">
+<meta property="og:image" content="https://ws3.sinaimg.cn/large/006tNc79ly1fzfeeqau0dj30n60baabe.jpg">
+<meta property="og:image" content="https://ws2.sinaimg.cn/large/006tNc79ly1fzfefulud6j30ce02qaa4.jpg">
+<meta property="og:image" content="https://ws3.sinaimg.cn/large/006tNc79ly1fzfeguj8hcj30ec028dfu.jpg">
+<meta property="og:image" content="https://ws2.sinaimg.cn/large/006tNc79ly1fzfehi61gwj30aa02g3yg.jpg">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/006tNc79ly1fzfei0b8ybj30bq06yq34.jpg">
+<meta property="og:image" content="https://ws1.sinaimg.cn/large/006tNc79ly1fzfeigbltfj30n60bwmyq.jpg">
+<meta property="og:image" content="https://ws4.sinaimg.cn/large/006tNc79ly1fzfelahmcfj30g2096mxp.jpg">
+<meta property="og:image" content="https://ws3.sinaimg.cn/large/006tNc79ly1fzfenf25x3j30hy06qjry.jpg">
+<meta property="og:image" content="https://ws4.sinaimg.cn/large/006tNc79ly1fzfenzmqkcj307e07y0t9.jpg">
+<meta property="og:image" content="https://ws4.sinaimg.cn/large/006tNc79ly1fzfeoroik2j30n60c2417.jpg">
+<meta property="og:image" content="https://ws3.sinaimg.cn/large/006tNc79ly1fzfep4d79kj30jw088gme.jpg">
+<meta property="og:updated_time" content="2019-01-22T07:46:35.519Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Rev⑥">
+<meta name="twitter:description" content="声明：本篇的作者 Esc1234（CCSR小组重要成员之一） 题目地址：https://pan.baidu.com/s/11FgG1ymTvcCwB_G7VH9KqA 知识点：android逆向">
+<meta name="twitter:image" content="https://ws1.sinaimg.cn/large/006tNc79ly1fzfedspvopj30n20c8772.jpg">
+    
+    
+        
+    
+    
+        <meta property="og:image" content="http://yoursite.com/assets/images/yuan.jpg"/>
+    
+    
+        <meta property="og:image" content="https://ws2.sinaimg.cn/large/0069RVTdly1fv9d6x9yhjj30o60iqau7.jpg"/>
+        <meta class="swiftype" name="image" data-type="enum" content="https://ws2.sinaimg.cn/large/0069RVTdly1fv9d6x9yhjj30o60iqau7.jpg" />
+    
+    
+        <meta property="og:image" content="https://ws3.sinaimg.cn/large/0069RVTdly1fv9d1artqxj31kw1z4kjp.jpg"/>
+        <meta class="swiftype" name="image" data-type="enum" content="https://ws3.sinaimg.cn/large/0069RVTdly1fv9d1artqxj31kw1z4kjp.jpg" />
+    
+    
+    <!--STYLES-->
+    <link rel="stylesheet" href="/assets/css/style-du2xmrqdqrl2ollgeiw050kpl6l4nbyz7bumjuurjgsxyopifvukebxc9lqe.min.css">
+    <!--STYLES END-->
+    
+
+    
+</head>
+
+    <body>
+        <div id="blog">
+            <!-- Define author's picture -->
+
+
+    
+        
+            
+        
+    
+
+<header id="header" data-behavior="4">
+    <i id="btn-open-sidebar" class="fa fa-lg fa-bars"></i>
+    <div class="header-title">
+        <a class="header-title-link" href="/ ">Ant Park</a>
+    </div>
+    
+        
+            <a  class="header-right-picture "
+                href="#about">
+        
+        
+            <img class="header-picture" src="/assets/images/yuan.jpg" alt="作者的图片"/>
+        
+        </a>
+    
+</header>
+
+            <!-- Define author's picture -->
+
+
+
+        
+    
+
+<nav id="sidebar" data-behavior="4">
+    <div class="sidebar-container">
+        
+            <div class="sidebar-profile">
+                <a href="/#about">
+                    <img class="sidebar-profile-picture" src="/assets/images/yuan.jpg" alt="作者的图片"/>
+                </a>
+                <h4 class="sidebar-profile-name">Yuan Shen</h4>
+                
+                    <h5 class="sidebar-profile-bio"><p>author.bio</p>
+</h5>
+                
+            </div>
+        
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/ "
+                            
+                            title="首页"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-home" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">首页</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-categories"
+                            
+                            title="分类"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-bookmark" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">分类</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-tags"
+                            
+                            title="标签"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-tags" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">标签</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-archives"
+                            
+                            title="归档"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-archive" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">归档</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+    </div>
+</nav>
+
+            
+        <div class="post-header-cover
+                    text-center
+                    post-header-cover--full"
+             style="background-image:url('https://ws3.sinaimg.cn/large/0069RVTdly1fv9d1artqxj31kw1z4kjp.jpg');"
+             data-behavior="4">
+            
+        </div>
+
+            <div id="main" data-behavior="4"
+                 class="hasCover
+                        hasCoverMetaOut
+                        hasCoverCaption">
+                
+<article class="post">
+    
+        <span class="post-header-cover-caption caption">Lonely</span>
+    
+    
+        <div class="post-header main-content-wrap text-center">
+    
+        <h1 class="post-title">
+            Rev⑥
+        </h1>
+    
+    
+</div>
+
+    
+    <div class="post-content markdown">
+        <div class="main-content-wrap">
+            <p>声明：本篇的作者 Esc1234（CCSR小组重要成员之一）</p>
+<p>题目地址：<a href="https://pan.baidu.com/s/11FgG1ymTvcCwB_G7VH9KqA" target="_blank" rel="noopener">https://pan.baidu.com/s/11FgG1ymTvcCwB_G7VH9KqA</a></p>
+<p>知识点：android逆向</p>
+<a id="more"></a>
+<h1 id="table-of-contents">目录</h1><ol class="toc"><li class="toc-item toc-level-3"><a class="toc-link" href="#题目解析"><span class="toc-text">题目解析</span></a></li></ol>
+<h3 id="题目解析"><a href="#题目解析" class="headerlink" title="题目解析"></a>题目解析</h3><ul>
+<li>在夜神模拟器中安装程序，打开后界面如下，app名字为LoopAndLoop，输入密码获得flag；</li>
+</ul>
+<p><img src="https://ws1.sinaimg.cn/large/006tNc79ly1fzfedspvopj30n20c8772.jpg" alt=""></p>
+<ul>
+<li>使用jeb打开apk文件，找到核心代码，如下图所示</li>
+</ul>
+<p><img src="https://ws3.sinaimg.cn/large/006tNc79ly1fzfeeqau0dj30n60baabe.jpg" alt=""></p>
+<ul>
+<li><code>if</code>语句中的判断条件为<code>MainActivity.this.check(v1, 99) == 1835996258</code>，找到check函数；</li>
+</ul>
+<p><img src="https://ws2.sinaimg.cn/large/006tNc79ly1fzfefulud6j30ce02qaa4.jpg" alt=""></p>
+<ul>
+<li>发现返回结果为chec函数，找到chec函数，发现chec函数为调用的so文件中的函数；</li>
+</ul>
+<p><img src="https://ws3.sinaimg.cn/large/006tNc79ly1fzfeguj8hcj30ec028dfu.jpg" alt=""></p>
+<p><img src="https://ws2.sinaimg.cn/large/006tNc79ly1fzfehi61gwj30aa02g3yg.jpg" alt=""></p>
+<ul>
+<li>在Libraries/armeabi中找到liblhm.so文件并提取出来</li>
+</ul>
+<p><img src="https://ws1.sinaimg.cn/large/006tNc79ly1fzfei0b8ybj30bq06yq34.jpg" alt=""></p>
+<ul>
+<li>使用IDA打开该so文件，找到chec函数，反编译结果如下</li>
+</ul>
+<p><img src="https://ws1.sinaimg.cn/large/006tNc79ly1fzfeigbltfj30n60bwmyq.jpg" alt=""></p>
+<ul>
+<li><p>发现该函数中调用了函数<code>check1，check2，check3</code>，回到jeb中查看MainActivity发现check1，check2，check3中也调用了chec函数，印证了该app的名字LoopAndLoop，决定调用一下该so文件中的函数。</p>
+</li>
+<li><p>首先搭建NDK环境，网上有教程，此处不在赘述，使用Android Studio新建一个Android项目，在app/src/main/下新建文件夹libs/armeabi/，然后将liblhm.so复制到该路径下，在build.gradle文件中添加如下代码</p>
+</li>
+</ul>
+<p><img src="https://ws4.sinaimg.cn/large/006tNc79ly1fzfelahmcfj30g2096mxp.jpg" alt=""></p>
+<ul>
+<li>MainActivity中添加代码如下</li>
+</ul>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">static</span> &#123;</span><br><span class="line">    System.loadLibrary(<span class="string">"lhm"</span>);</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">public</span> <span class="title">MainActivity</span><span class="params">()</span> </span>&#123;</span><br><span class="line">    <span class="keyword">super</span>();</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">public</span> <span class="keyword">native</span> <span class="keyword">int</span> <span class="title">chec</span><span class="params">(<span class="keyword">int</span> arg1, <span class="keyword">int</span> arg2)</span></span>;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">public</span> <span class="keyword">int</span> <span class="title">check</span><span class="params">(<span class="keyword">int</span> arg2, <span class="keyword">int</span> arg3)</span> </span>&#123;</span><br><span class="line">    <span class="keyword">return</span> <span class="keyword">this</span>.chec(arg2, arg3);</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">public</span> <span class="keyword">int</span> <span class="title">check1</span><span class="params">(<span class="keyword">int</span> arg4, <span class="keyword">int</span> arg5)</span> </span>&#123;</span><br><span class="line">    <span class="keyword">int</span> v1 = arg4;</span><br><span class="line">    <span class="keyword">int</span> v0;</span><br><span class="line">    <span class="keyword">for</span>(v0 = <span class="number">1</span>; v0 &lt; <span class="number">100</span>; ++v0) &#123;</span><br><span class="line">        v1 += v0;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="keyword">this</span>.chec(v1, arg5);</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">public</span> <span class="keyword">int</span> <span class="title">check2</span><span class="params">(<span class="keyword">int</span> arg5, <span class="keyword">int</span> arg6)</span> </span>&#123;</span><br><span class="line">    <span class="keyword">int</span> v2;</span><br><span class="line">    <span class="keyword">int</span> v3 = <span class="number">1000</span>;</span><br><span class="line">    <span class="keyword">int</span> v1 = arg5;</span><br><span class="line">    <span class="keyword">if</span>(arg6 % <span class="number">2</span> == <span class="number">0</span>) &#123;</span><br><span class="line">        <span class="keyword">int</span> v0;</span><br><span class="line">        <span class="keyword">for</span>(v0 = <span class="number">1</span>; v0 &lt; v3; ++v0) &#123;</span><br><span class="line">            v1 += v0;</span><br><span class="line">        &#125;</span><br><span class="line"></span><br><span class="line">        v2 = <span class="keyword">this</span>.chec(v1, arg6);</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">else</span> &#123;</span><br><span class="line">        <span class="keyword">for</span>(<span class="keyword">int</span> v0 = <span class="number">1</span>; v0 &lt; v3; ++v0) &#123;</span><br><span class="line">            v1 -= v0;</span><br><span class="line">        &#125;</span><br><span class="line"></span><br><span class="line">        v2 = <span class="keyword">this</span>.chec(v1, arg6);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> v2;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">public</span> <span class="keyword">int</span> <span class="title">check3</span><span class="params">(<span class="keyword">int</span> arg4, <span class="keyword">int</span> arg5)</span> </span>&#123;</span><br><span class="line">    <span class="keyword">int</span> v1 = arg4;</span><br><span class="line">    <span class="keyword">int</span> v0;</span><br><span class="line">    <span class="keyword">for</span>(v0 = <span class="number">1</span>; v0 &lt; <span class="number">10000</span>; ++v0) &#123;</span><br><span class="line">        v1 += v0;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="keyword">this</span>.chec(v1, arg5);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>在<code>onCreate</code>函数中调用chec函数</li>
+</ul>
+<p><img src="https://ws3.sinaimg.cn/large/006tNc79ly1fzfenf25x3j30hy06qjry.jpg" alt=""></p>
+<ul>
+<li>输出结果为：</li>
+</ul>
+<p><img src="https://ws4.sinaimg.cn/large/006tNc79ly1fzfenzmqkcj307e07y0t9.jpg" alt=""></p>
+<ul>
+<li>猜测chec函数返回结果为为将<code>1599503850</code>加上第一个参数的值，那么密码为<code>1835996258-1599503850=236492408</code>，输入app中验证，获得flag如下:</li>
+</ul>
+<p><img src="https://ws4.sinaimg.cn/large/006tNc79ly1fzfeoroik2j30n60c2417.jpg" alt=""></p>
+<ul>
+<li>当然也可以用爆破获得密码，只不过用时较长。</li>
+</ul>
+<p><img src="https://ws3.sinaimg.cn/large/006tNc79ly1fzfep4d79kj30jw088gme.jpg" alt=""></p>
+
+            
+
+        </div>
+    </div>
+    <div id="post-footer" class="post-footer main-content-wrap">
+        
+            <div class="post-footer-tags">
+                <span class="text-color-light text-small">标签</span><br/>
+                
+    <a class="tag tag--primary tag--small t-link" href="/tags/android/">android</a> <a class="tag tag--primary tag--small t-link" href="/tags/jeb/">jeb</a> <a class="tag tag--primary tag--small t-link" href="/tags/reverse/">reverse</a>
+
+            </div>
+        
+        
+        
+    </div>
+</article>
+
+
+
+                <footer id="footer" class="main-content-wrap">
+    <span class="copyrights">
+        Copyrights &copy; 2019 Yuan Shen. All Rights Reserved.
+    </span>
+</footer>
+
+            </div>
+            
+        </div>
+        
+
+
+    
+        
+    
+
+<div id="about">
+    <div id="about-card">
+        <div id="about-btn-close">
+            <i class="fa fa-times"></i>
+        </div>
+        
+            <img id="about-card-picture" src="/assets/images/yuan.jpg" alt="作者的图片"/>
+        
+            <h4 id="about-card-name">Yuan Shen</h4>
+        
+            <div id="about-card-bio"><p>author.bio</p>
+</div>
+        
+        
+            <div id="about-card-job">
+                <i class="fa fa-briefcase"></i>
+                <br/>
+                <p>author.job</p>
+
+            </div>
+        
+        
+    </div>
+</div>
+
+        
+        
+<div id="cover" style="background-image:url('/assets/images/cover.jpg');"></div>
+        <!--SCRIPTS-->
+<script src="/assets/js/script-vufjrm3fmbuttogo1hxuu0w9w0sesk5iyysjuguc2hdhufot9szxg8twijry.min.js"></script>
+<!--SCRIPTS END-->
+
+
+
+    </body>
+</html>
