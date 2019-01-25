@@ -156,7 +156,7 @@
                 <section class="postShorten-group main-content-wrap">
     
     
-    <article class="postShorten postShorten--thumbnailimg-bottom">
+    <article class="postShorten postShorten--thumbnailimg-right">
         <div class="postShorten-wrap">
             
             <div class="postShorten-header">
@@ -184,128 +184,13 @@
 
             </div>
             
-                <div class="postShorten-content">
-                    <h2 id="分析环境"><a href="#分析环境" class="headerlink" title="分析环境"></a>分析环境</h2><table>
-<thead>
-<tr>
-<th></th>
-<th style="text-align:right">名称</th>
-<th style="text-align:right">版本</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>操作系统</td>
-<td style="text-align:right">Windows7 32位</td>
-<td style="text-align:right">简体中文版</td>
-</tr>
-<tr>
-<td>虚拟机</td>
-<td style="text-align:right">VMware Workstations 15 pro</td>
-<td style="text-align:right">15.0.2 build-10952284</td>
-</tr>
-<tr>
-<td>反汇编器</td>
-<td style="text-align:right">IDA Pro</td>
-<td style="text-align:right">6.8</td>
-</tr>
-<tr>
-<td>漏洞软件</td>
-<td style="text-align:right">Internet Explorer8</td>
-<td style="text-align:right">8.0.7601.17514</td>
-</tr>
-<tr>
-<td>调试器</td>
-<td style="text-align:right">WinDbg</td>
-<td style="text-align:right">6.12</td>
-</tr>
-</tbody>
-</table>
-<h2 id="背景知识"><a href="#背景知识" class="headerlink" title="背景知识"></a>背景知识</h2><h2 id="漏洞简述"><a href="#漏洞简述" class="headerlink" title="漏洞简述"></a>漏洞简述</h2><ul>
-<li>这是一个IE浏览器的漏洞，成功利用可实现<strong>远程代码执行</strong>，错误出在<code>mshtml.dll</code>模块中的<code>CTableLayout::CalculateMinMax</code>函数里，程序在执行时会以HTML代码中的<code>&lt;col&gt;</code>元素的<code>span</code>属性作为循环控制次数向堆空间写入数据，如果此span值设置的不当，那么就会引发堆溢出问题。</li>
-<li><code>mshtml.dll</code>模块是IE中的重要组件，它用来解析页面中的HTML和CSS，后续的分析也主要集中在此模块中；如下列出了IE中的主要组件，进一步参考：</li>
-</ul>
-<p><img src="https://ws3.sinaimg.cn/large/006tNc79ly1fzin4h0xdej30av0as40q.jpg" alt=""></p>
-<h2 id="漏洞PoC"><a href="#漏洞PoC" class="headerlink" title="漏洞PoC"></a>漏洞PoC</h2><p>将通过如下的PoC代码来进行梳理：</p>
-<figure class="highlight html"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><span class="line"><span class="tag">&lt;<span class="name">html</span>&gt;</span>  </span><br><span class="line"><span class="tag">&lt;<span class="name">body</span>&gt;</span>  </span><br><span class="line">    <span class="tag">&lt;<span class="name">table</span> <span class="attr">style</span>=<span class="string">"table-layout:fixed"</span> &gt;</span></span><br><span class="line">        <span class="tag">&lt;<span class="name">col</span> <span class="attr">id</span>=<span class="string">"132"</span> <span class="attr">width</span>=<span class="string">"41"</span> <span class="attr">span</span>=<span class="string">"6"</span> &gt;</span>  <span class="tag">&lt;/<span class="name">col</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;/<span class="name">table</span>&gt;</span></span><br><span class="line"></span><br><span class="line">    <span class="tag">&lt;<span class="name">script</span>&gt;</span><span class="undefined"></span></span><br><span class="line"><span class="undefined"></span></span><br><span class="line"><span class="undefined">    function over_trigger() &#123;</span></span><br><span class="line"><span class="undefined">        var obj_col = document.getElementById("132");</span></span><br><span class="line"><span class="undefined">        obj_col.width = "42765";</span></span><br><span class="line"><span class="undefined">        obj_col.span = 666;</span></span><br><span class="line"><span class="undefined">    &#125;</span></span><br><span class="line"><span class="undefined"></span></span><br><span class="line"><span class="undefined">    setTimeout("over_trigger();",1);</span></span><br><span class="line"><span class="undefined"></span></span><br><span class="line"><span class="undefined">    </span><span class="tag">&lt;/<span class="name">script</span>&gt;</span></span><br><span class="line"><span class="tag">&lt;/<span class="name">body</span>&gt;</span>  </span><br><span class="line"><span class="tag">&lt;/<span class="name">html</span>&gt;</span></span><br></pre></td></tr></table></figure>
-<ul>
-<li>上述代码功能：最开始创建时<code>span</code>的属性值为6，而后通过js中的<code>over_trigger()</code>函数将其动态更新为<strong>666</strong>（这个可以随意选，只要能保证溢出就可以了）。另外，width的属性值和写入堆空间的内容有关，后面还会再说。</li>
-<li>首先将PoC保存为html文件并用IE打开，会弹出阻止提示，此时用WinDbg附加IE进程，附加列表中会有两个IE进程，一个是broker进程，一个是页面内容进程，选择后面的也就是当前选项卡对应的子进程；</li>
-</ul>
-<p><img src="https://ws1.sinaimg.cn/large/006tNc79ly1fzior7zeggj30mw07841x.jpg" alt=""></p>
-<ul>
-<li>通过<code>.reload /f</code>命令强制加载符号命令，lm命令查看加载结果，并且设置三个断点；<ul>
-<li><code>CTableLayout::CalculateMinMax</code>函数中，所以这个地方肯定要下个断点；</li>
-<li>因为是堆溢出，所以<code>_HeapRealloc</code>函数也来个断点；</li>
-<li>最后的<code>CTableCol::GetAAspan</code>函数是用来获取span属性值的，1和2两个断点目前暂时禁用；</li>
-</ul>
-</li>
-</ul>
-<p><img src="https://ws1.sinaimg.cn/large/006tNc79ly1fzin56gyi9j30h204i0sq.jpg" alt=""></p>
-<ul>
-<li><strong>g</strong>命令跑起来，在IE中允许阻止的内容，弹出警告直接确定，回到WinDbg可以看到程序第一次在<code>CTableLayout::CalculateMinMax</code>函数入口断下来了，这是处理最开始创建时<strong>span值为6</strong>的情况，查看调用栈；</li>
-</ul>
-<p><img src="https://ws3.sinaimg.cn/large/006tNc79ly1fzin5gxdjzj30ju04xjrc.jpg" alt=""></p>
-<ul>
-<li>再IDA中<code>CTableLayout::CalculateMinMax</code>函数的声明:</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">void</span> __thiscall CTableLayout::CalculateMinMax(CTableLayout *theTableLayoutObj, LPVOID lpUnknownStackBuffer);</span><br></pre></td></tr></table></figure>
-<ul>
-<li>重点关注<strong>CTableLayout</strong>这个变量，它是一个指针，由上面的kb命令可知其值为<code>05db7ea8</code>；</li>
-</ul>
-<p><img src="https://ws1.sinaimg.cn/large/006tNc79ly1fzin6itf8jj30lm01lmwy.jpg" alt=""></p>
-<p><strong><em>可见参数1引用的是CTableLayout对象，也就是<code>&lt;table&gt;</code>标签在内存中的对象；</em></strong></p>
-<ul>
-<li>程序申请了堆空间用于保存column的样式信息，每个样式信息占0x1C（28个）字节，有多少个样式信息由span属性值来确定，因此这里申请的堆空间大小为<code>0x1C*6=0xA8</code>，即_HeapRealloc函数入口断下后ecx寄存器的值，函数调用时的入参如果用到寄存器的话一般都是ecx，返回参数一般保存在eax中，同时注意随后分配的初始地址会保存到esi寄存器对应的地址处，可以看到此时的值由NULL变为0x049c7f58。</li>
-</ul>
-<p><img src="https://ws2.sinaimg.cn/large/006tNc79ly1fzin72tvwzj30hi0b9dfy.jpg" alt=""></p>
-<ul>
-<li>继续运行程序会在<code>CTableCol::GetAAspan</code>处断下来，也就是获取span值作为写入样式信息时循环的控制次数，函数返回结果保存在eax中，此时的值为<strong>6</strong>。 </li>
-</ul>
-<p><img src="https://ws1.sinaimg.cn/large/006tNc79ly1fzin8chqrtj30h904r0sn.jpg" alt=""></p>
-<ul>
-<li>再来看下程序向申请的堆空间写入样式信息的过程，我们在起始地址处下个写入断点。 </li>
-</ul>
-<p><img src="https://ws3.sinaimg.cn/large/006tNc79ly1fzin8qahurj30ip09zglo.jpg" alt=""></p>
-<ul>
-<li>从PoC中可以看到此时对应的width属性值为<strong>41</strong>，<code>0x049c7f58</code>处写入的内容就为width值<code>41*100=0x00001004</code>，事实上程序断下来的时候0x1C个字节的样式信息都已写入完成。我们再单步往下跟一下。</li>
-</ul>
-<p><img src="https://ws4.sinaimg.cn/large/006tNc79ly1fzin91qwhaj30il0jbdgd.jpg" alt=""></p>
-<ul>
-<li>可以看到出现了<strong>inc＋cmp</strong>组合，可以猜想这应该就是控制堆空间写入样式信息的循环了，为了验证这个猜想多跟几次这个过程，可以发现事实确是如此。<ul>
-<li>这几条汇编指令的意思就是<strong>ebp-14h</strong>对应的值每次加<strong>1</strong>，即每次循环后递增；</li>
-<li>然后<strong>ebp-24h</strong>对应的值每次加<strong>0x1C</strong>，即每次加一个样式信息的字节数；</li>
-<li>最后当前的循环次数和<strong>ebp+10h</strong>对应的值比较，即span属性值；</li>
-</ul>
-</li>
-<li>接来看下程序通过<code>js脚本</code>动态更新span属性值后，也就是span值变为<strong>666</strong>时程序第二次在<code>CTableLayout::CalculateMinMax</code>函数入口断下后是个什么情形，理论上是要重新分配堆空间的，毕竟要多写入<strong>660</strong>个样式信息，而后再获取此时的span值作为循环控制次数，最后才向堆空间写入样式信息。我们来到程序此时断下来的地方，顺便看下之前确实是写入了6个样式信息。</li>
-</ul>
-<p><img src="https://ws3.sinaimg.cn/large/006tNc79ly1fzin9asn0ij30hm09ggln.jpg" alt=""></p>
-<ul>
-<li>如果程序继续往下应该是要分配堆空间了，但我们却发现程序跳过了分配堆空间的过程，错误认为之前分配的空间已经足够而转去直接获取控制循环次数的span属性值eax，即<code>0x29a＝666</code>。</li>
-</ul>
-<p><img src="https://ws4.sinaimg.cn/large/006tNc79ly1fzin9j72t7j30h806wmx5.jpg" alt=""></p>
-<ul>
-<li>接下来和前面一样是写入样式信息的过程，不过这次是对只能容纳6个样式信息的堆空间写入了666个样式信息，从而引发了堆溢出错误。 </li>
-</ul>
-<p><img src="https://ws3.sinaimg.cn/large/006tNc79ly1fzin9sjcfgj30ii0deglv.jpg" alt=""></p>
-<p><img src="https://ws4.sinaimg.cn/large/006tNc79ly1fzina4er9ej30iw0ect95.jpg" alt=""></p>
-<ul>
-<li>可以看到<code>ebp+10h</code>对应此时的span属性值<strong>0x29a</strong>，所以程序最终将会执行<strong>666</strong>次循环。堆溢出发生后程序继续运行会造成内存访问违规，从而导致IE浏览器的崩溃。</li>
-</ul>
-<p><img src="https://ws1.sinaimg.cn/large/006tNc79ly1fzioidiekej30tk0biq6g.jpg" alt=""></p>
-<ul>
-<li>崩溃点确认，向edi指向的内存里拷贝值导致crash，同时看到edi来源于esi，但是esi的处理代码并不在这个函数中，所以回溯到上一个函数</li>
-</ul>
-<p><img src="https://ws3.sinaimg.cn/large/006tNc79ly1fzit3qcb8aj30sw09ugno.jpg" alt=""></p>
-<h2 id="漏洞利用"><a href="#漏洞利用" class="headerlink" title="漏洞利用"></a>漏洞利用</h2>
+                <div class="postShorten-excerpt">
+                    <!--toc -->
                     
-                    
-                        <p>
-                            <a href="/2019/01/25/CVE-2012-1876/#post-footer" class="postShorten-excerpt_link link">
-                                评论和共享
-                            </a>
-                        </p>
+                        <a href="/2019/01/25/CVE-2012-1876/" class="postShorten-excerpt_link link">
+                            阅读全文
+                        </a>
+                        
                     
                 </div>
             
